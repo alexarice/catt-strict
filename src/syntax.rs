@@ -1,34 +1,19 @@
+use crate::common::{Name, NoDispOption, Tree};
 use chumsky::{prelude::*, text::keyword};
 use itertools::Itertools;
 use std::fmt::Display;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Name(String);
-
-impl Display for Name {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NoDispOption<T>(pub Option<T>);
-
-impl<T: Display> Display for NoDispOption<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.0 {
-            Some(e) => e.fmt(f),
-            None => Ok(()),
-        }
-    }
+pub enum Head {
+    Susp(Box<Head>),
+    TopLvl(Name),
+    Coh(Tree<NoDispOption<Name>>, Box<Type>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Term {
-    App(Box<Term>, Args, Option<Box<Type>>),
     Var(Name),
-    Coh(Ctx, Box<Type>),
-    Meta,
+    WithArgs(Head, Args, Option<Box<Type>>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -39,7 +24,6 @@ pub enum Args {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Type {
-    Meta,
     Base,
     Arr(Term, Option<Box<Type>>, Term),
 }
@@ -47,13 +31,7 @@ pub enum Type {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Ctx {
     Tree(Tree<NoDispOption<Name>>),
-    Other(Vec<(Name, Option<Type>)>),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Tree<T> {
-    pub elements: Vec<T>,
-    pub branches: Vec<Tree<T>>,
+    Other(Vec<(Name, NoDispOption<Type>, bool)>),
 }
 
 fn tree<O: 'static, P>(el: P) -> impl Parser<char, Tree<O>, Error = Simple<char>> + Clone
@@ -95,15 +73,18 @@ where
 {
     keyword("coh")
         .ignore_then(
-            ctx(term.clone())
+            tree(ident().padded().or_not().map(NoDispOption))
                 .padded()
-                .then(just(":").ignore_then(ty(term).padded()))
+                .then(just(":").ignore_then(ty(term.clone()).padded()))
                 .delimited_by(just("["), just("]"))
                 .padded()
                 .map(|(ctx, ty)| Term::Coh(ctx, Box::new(ty))),
         )
         .or(ident().map(|x| Term::Var(x)))
-        .or(just("_").to(Term::Meta))
+        .or(just("_").to(Term::Hole))
+        .or(just("‼")
+            .ignore_then(term.padded().delimited_by(just("("), just(")")))
+            .map(|t| Term::Susp(Box::new(t))))
 }
 
 fn args<P>(term: P) -> impl Parser<char, Args, Error = Simple<char>> + Clone
@@ -151,12 +132,23 @@ where
     tree(ident().padded().or_not().map(NoDispOption))
         .map(Ctx::Tree)
         .or(ident()
-            .map(|i| (i, None))
+            .map(|i| (i, NoDispOption(None), false))
+            .or(ident()
+                .padded()
+                .delimited_by(just("{"), just("}"))
+                .map(|i| (i, NoDispOption(None), true)))
             .or(ident().padded().then(
                 just(":")
-                    .ignore_then(ty(term).padded().map(Some))
-                    .delimited_by(just("("), just(")")),
-            ))
+                    .ignore_then(ty(term.clone()).padded()))
+                .delimited_by(just("("), just(")"))
+                .map(|(i, ty)| (i, NoDispOption(Some(ty)), false))
+            )
+	    .or(ident().padded().then(
+                just(":")
+                    .ignore_then(ty(term).padded()))
+                .delimited_by(just("{"), just("}"))
+                .map(|(i, ty)| (i, NoDispOption(Some(ty)), true))
+            )
             .repeated()
             .map(Ctx::Other))
 }
@@ -183,7 +175,7 @@ pub fn term() -> impl Parser<char, Term, Error = Simple<char>> + Clone {
 impl Display for Term {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Term::Meta => {
+	    Term::Hole => {
                 f.write_str("_")?;
             }
             Term::App(t, a, ty) => {
@@ -192,6 +184,9 @@ impl Display for Term {
                 if let Some(typ) = ty {
                     write!(f, "<{}>", typ)?;
                 }
+            }
+            Term::Susp(t) => {
+                write!(f, "‼({})", t)?;
             }
             Term::Var(name) => {
                 name.0.fmt(f)?;
@@ -233,10 +228,12 @@ impl Display for Ctx {
                 t.fmt(f)?;
             }
             Ctx::Other(xs) => {
-                for (name, ty) in xs {
-                    match ty {
-                        Some(typ) => write!(f, "({name} : {typ})")?,
-                        None => name.fmt(f)?,
+                for (name, ty, icit) in xs {
+                    match (&ty.0, icit) {
+                        (Some(typ), true) => write!(f, "{{{name} : {typ}}}")?,
+			(Some(typ), false) => write!(f, "({name} : {typ})")?,
+                        (None, true) => write!(f, "{{{name}}}")?,
+			(None, false) => name.fmt(f)?,
                     };
                 }
             }
