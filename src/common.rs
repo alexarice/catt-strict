@@ -1,5 +1,9 @@
 use std::fmt::Display;
 
+use derivative::Derivative;
+
+use crate::term::{TermT, TypeT};
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Name(pub String);
 
@@ -9,7 +13,8 @@ impl Display for Name {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Derivative)]
+#[derivative(Default(bound = ""))]
 pub struct NoDispOption<T>(pub Option<T>);
 
 impl<T: Display> Display for NoDispOption<T> {
@@ -29,20 +34,70 @@ pub struct Tree<T> {
 
 impl<T> Tree<T> {
     pub fn get_paths(&self) -> Vec<(Path, &T)> {
-        let mut pairs = vec![];
-        self.collect_paths(&Path(vec![]), &mut pairs);
-        pairs
+        self.elements
+            .iter()
+            .enumerate()
+            .map(|(i, t)| (Path::here(i), t))
+            .chain(self.branches.iter().enumerate().flat_map(|(i, br)| {
+                br.get_paths()
+                    .into_iter()
+                    .map(move |(p, t)| (p.extend(i), t))
+            }))
+            .collect()
     }
 
-    fn collect_paths<'a>(&'a self, current_path: &Path, pairs: &mut Vec<(Path, &'a T)>) {
-        for (i, x) in self.elements.iter().enumerate() {
-            pairs.push((current_path.clone().extend(i), x));
+    pub fn singleton(i: T) -> Self {
+        Tree {
+            elements: vec![i],
+            branches: vec![],
         }
-        let mut path = current_path.clone().extend(0);
-        for x in &self.branches {
-            x.collect_paths(&path, pairs);
-            let len = path.0.len();
-            path.0[len] += 1;
+    }
+
+    pub fn label_from_max<'a, S: Clone + 'a>(
+        &self,
+        iter: &mut impl Iterator<Item = &'a S>,
+    ) -> Option<Tree<NoDispOption<S>>> {
+        if self.branches.is_empty() {
+            return iter
+                .next()
+                .map(|i| Tree::singleton(NoDispOption(Some(i.clone()))));
+        }
+        let branches = self
+            .branches
+            .iter()
+            .map(|tr| tr.label_from_max(iter))
+            .collect::<Option<Vec<_>>>()?;
+
+        let elements = self.elements.iter().map(|_| NoDispOption(None)).collect();
+
+        Some(Tree { elements, branches })
+    }
+
+    pub fn map<U, S>(&self, f: &U) -> Tree<S>
+    where
+        U: Fn(&T) -> S,
+    {
+        let branches = self.branches.iter().map(|br| br.map(f)).collect();
+        let elements = self.elements.iter().map(f).collect();
+        Tree { branches, elements }
+    }
+
+    pub fn from_paths<I, S>(&self, iter: &mut I) -> Tree<S>
+    where
+        I: Iterator<Item = S>,
+    {
+        let elements = iter.by_ref().take(self.elements.len()).collect();
+        let branches = self.branches.iter().map(|br| br.from_paths(iter)).collect();
+        Tree { elements, branches }
+    }
+
+    pub fn susp(self) -> Self
+    where
+        T: Default,
+    {
+        Tree {
+            elements: vec![Default::default(), Default::default()],
+            branches: vec![self],
         }
     }
 }
@@ -51,9 +106,40 @@ impl<T> Tree<T> {
 pub struct Path(pub Vec<usize>);
 
 impl Path {
+    pub fn susp(mut self, n: usize) -> Self {
+        self.0.extend((0..).take(n));
+	self
+    }
+
+    pub fn de_susp(mut self) -> Self {
+        self.0.pop();
+        self
+    }
+
+    pub fn here(n: usize) -> Self {
+        Path(vec![n])
+    }
+
     pub fn extend(mut self, n: usize) -> Path {
         self.0.push(n);
         self
+    }
+
+    pub fn to_type(&self) -> TypeT {
+        let mut ty = TypeT::Base;
+        let mut current_path = Path(vec![]);
+
+        for x in &self.0[0..self.0.len() - 1] {
+            let snd = current_path.clone().extend(x + 1);
+            current_path = current_path.extend(*x);
+
+            ty = TypeT::Arr(
+                TermT::Var(Pos::Path(current_path.clone())),
+                Box::new(ty),
+                TermT::Var(Pos::Path(snd)),
+            )
+        }
+        ty
     }
 }
 
@@ -61,4 +147,20 @@ impl Path {
 pub enum Pos {
     Level(usize),
     Path(Path),
+}
+
+impl Pos {
+    pub fn susp(self, n: usize) -> Self {
+        match self {
+            Pos::Level(l) => Pos::Level(l + 2 * n),
+            Pos::Path(p) => Pos::Path(p.susp(n)),
+        }
+    }
+
+    pub fn de_susp(self) -> Self {
+        match self {
+            Pos::Level(l) => Pos::Level(l - 2),
+            Pos::Path(p) => Pos::Path(p.de_susp()),
+        }
+    }
 }

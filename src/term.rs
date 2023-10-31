@@ -1,79 +1,61 @@
-use crate::{
-    common::{Name, Pos, Tree},
-    normal::{TermN, TypeN},
-    typecheck::SemCtx,
-};
+use derivative::Derivative;
 
+use crate::common::{Name, NoDispOption, Pos, Tree};
+
+#[derive(Clone, Debug, Derivative)]
+#[derivative(PartialEq, Eq)]
 pub enum TermT {
-    App(Box<TermT>, ArgsT, Box<TypeT>),
+    App(Box<TermT>, ArgsWithTypeT),
     Var(Pos),
-    TopLvl(Name, TermN),
+    TopLvl(Name, #[derivative(PartialEq = "ignore")] Box<TermT>),
     Susp(Box<TermT>),
-    Coh(Tree<()>, Box<TypeT>),
+    Coh(Tree<NoDispOption<Name>>, Box<TypeT>),
 }
 
+pub type SubT = Vec<TermT>;
+pub type LabelT = Tree<TermT>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ArgsT {
-    Sub(Vec<TermT>),
-    Label(Tree<TermT>),
+    Sub(SubT),
+    Label(LabelT),
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ArgsWithTypeT {
+    pub args: ArgsT,
+    pub ty: Box<TypeT>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeT {
     Base,
     Arr(TermT, Box<TypeT>, TermT),
+    App(Box<TypeT>, ArgsWithTypeT),
+    Susp(Box<TypeT>),
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CtxT {
-    Tree(Tree<()>),
-    Other(Vec<TypeT>),
+    Tree(Tree<NoDispOption<Name>>),
+    Ctx(Vec<(Option<Name>, TypeT)>),
 }
 
-impl TermT {
-    pub fn eval(&self, ctx: &SemCtx) -> TermN {
-        match &self {
-            TermT::App(t, args, ty) => t.eval(&args.eval(ty, ctx)),
-            TermT::Var(pos) => ctx.get(pos),
-            TermT::TopLvl(_, _) => todo!(),
-            TermT::Susp(t) => todo!(),
-            TermT::Coh(_, _) => todo!(),
-            TermT::Meta(idx) => TermN::Meta(*idx),
-        }
-    }
-}
-
-impl TypeT {
-    pub fn eval(&self, ctx: &SemCtx) -> TypeN {
-        match &self {
-            TypeT::Meta(idx) => TypeN::Meta(*idx),
-            TypeT::Base => ctx.get_ty().clone(),
-            TypeT::Arr(s, a, t) => {
-		TypeN::Arr(s.eval(ctx), Box::new(a.eval(ctx)), t.eval(ctx))
-	    },
-        }
-    }
-}
-
-impl ArgsT {
-    pub fn eval(&self, ty: &TypeT, ctx: &SemCtx) -> SemCtx {
+impl CtxT {
+    pub fn susp(self) -> CtxT {
         match self {
-            ArgsT::Sub(ts) => {
-                let map = ts
-                    .iter()
-                    .enumerate()
-                    .map(|(i, t)| (Pos::Level(i), t.eval(ctx)))
-                    .collect();
-                let tyn = ty.eval(ctx);
-                SemCtx::new(map, tyn)
+            CtxT::Tree(tr) => {
+                let new_tree = Tree {
+                    elements: vec![NoDispOption(None), NoDispOption(None)],
+                    branches: vec![tr],
+                };
+                CtxT::Tree(new_tree)
             }
-            ArgsT::Label(tr) => {
-		let pairs = tr.get_paths();
-
-		let map = pairs.into_iter().map(|(path,tm)| {
-		    (Pos::Path(path), tm.eval(ctx))
-		}).collect();
-
-		let tyn = ty.eval(ctx);
-		SemCtx::new(map, tyn)
-	    },
+            CtxT::Ctx(ctx) => {
+                let mut new_ctx = vec![(None, TypeT::Base), (None, TypeT::Base)];
+                new_ctx.extend(ctx);
+                CtxT::Ctx(new_ctx)
+            }
         }
     }
 }

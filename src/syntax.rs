@@ -16,10 +16,13 @@ pub enum Term {
     WithArgs(Head, Args, Option<Box<Type>>),
 }
 
+pub type Sub = Vec<Term>;
+pub type Label = Tree<NoDispOption<Term>>;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Args {
-    Sub(Vec<Term>),
-    Label(Tree<NoDispOption<Term>>),
+    Sub(Sub),
+    Label(Label),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -31,7 +34,7 @@ pub enum Type {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Ctx {
     Tree(Tree<NoDispOption<Name>>),
-    Other(Vec<(Name, NoDispOption<Type>, bool)>),
+    Other(Vec<(Name, Type)>),
 }
 
 fn tree<O: 'static, P>(el: P) -> impl Parser<char, Tree<O>, Error = Simple<char>> + Clone
@@ -67,24 +70,25 @@ fn ident() -> impl Parser<char, Name, Error = Simple<char>> + Clone {
     })
 }
 
-fn atom<P>(term: P) -> impl Parser<char, Term, Error = Simple<char>> + Clone
+fn head<P>(term: P) -> impl Parser<char, Head, Error = Simple<char>> + Clone
 where
-    P: Parser<char, Term, Error = Simple<char>> + Clone,
+    P: Parser<char, Term, Error = Simple<char>> + Clone + 'static,
 {
-    keyword("coh")
-        .ignore_then(
-            tree(ident().padded().or_not().map(NoDispOption))
-                .padded()
-                .then(just(":").ignore_then(ty(term.clone()).padded()))
-                .delimited_by(just("["), just("]"))
-                .padded()
-                .map(|(ctx, ty)| Term::Coh(ctx, Box::new(ty))),
-        )
-        .or(ident().map(|x| Term::Var(x)))
-        .or(just("_").to(Term::Hole))
-        .or(just("‼")
-            .ignore_then(term.padded().delimited_by(just("("), just(")")))
-            .map(|t| Term::Susp(Box::new(t))))
+    recursive(|head| {
+        keyword("coh")
+            .ignore_then(
+                tree(ident().padded().or_not().map(NoDispOption))
+                    .padded()
+                    .then(just(":").ignore_then(ty(term.clone()).padded()))
+                    .delimited_by(just("["), just("]"))
+                    .padded()
+                    .map(|(ctx, ty)| Head::Coh(ctx, Box::new(ty))),
+            )
+            .or(ident().map(|x| Head::TopLvl(x)))
+            .or(just("‼")
+                .ignore_then(head.padded())
+                .map(|t| Head::Susp(Box::new(t))))
+    })
 }
 
 fn args<P>(term: P) -> impl Parser<char, Args, Error = Simple<char>> + Clone
@@ -108,9 +112,8 @@ where
         .clone()
         .then(just("->").padded().ignore_then(term.clone()));
 
-    just("_")
-        .to(Type::Meta)
-        .or(just("*").to(Type::Base))
+    just("*")
+        .to(Type::Base)
         .or(arr.map(|(s, t)| Type::Arr(s, None, t)))
         .then(
             just("|")
@@ -125,37 +128,24 @@ where
         .foldl(|a, (s, t)| Type::Arr(s, Some(Box::new(a)), t))
 }
 
-fn ctx<P>(term: P) -> impl Parser<char, Ctx, Error = Simple<char>> + Clone
+pub fn ctx<P>(term: P) -> impl Parser<char, Ctx, Error = Simple<char>> + Clone
 where
     P: Parser<char, Term, Error = Simple<char>> + Clone,
 {
     tree(ident().padded().or_not().map(NoDispOption))
         .map(Ctx::Tree)
         .or(ident()
-            .map(|i| (i, NoDispOption(None), false))
-            .or(ident()
-                .padded()
-                .delimited_by(just("{"), just("}"))
-                .map(|i| (i, NoDispOption(None), true)))
-            .or(ident().padded().then(
-                just(":")
-                    .ignore_then(ty(term.clone()).padded()))
-                .delimited_by(just("("), just(")"))
-                .map(|(i, ty)| (i, NoDispOption(Some(ty)), false))
-            )
-	    .or(ident().padded().then(
-                just(":")
-                    .ignore_then(ty(term).padded()))
-                .delimited_by(just("{"), just("}"))
-                .map(|(i, ty)| (i, NoDispOption(Some(ty)), true))
-            )
+            .padded()
+            .then(just(":").ignore_then(ty(term.clone()).padded()))
+            .delimited_by(just("("), just(")"))
+            .padded()
             .repeated()
             .map(Ctx::Other))
 }
 
 pub fn term() -> impl Parser<char, Term, Error = Simple<char>> + Clone {
     recursive(|term| {
-        atom(term.clone())
+        ident().map(|x| Term::Var(x)).or(head(term.clone())
             .padded()
             .then(
                 args(term.clone())
@@ -165,34 +155,41 @@ pub fn term() -> impl Parser<char, Term, Error = Simple<char>> + Clone {
                             .delimited_by(just("<"), just(">"))
                             .or_not(),
                     )
-                    .padded()
-                    .repeated(),
+                    .padded(),
             )
-            .foldl(|t, (a, ty)| Term::App(Box::new(t), a, ty.map(Box::new)))
+            .map(|(head, (a, ty))| Term::WithArgs(head, a, ty.map(Box::new))))
     })
+}
+
+impl Display for Head {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Head::Susp(head) => {
+                write!(f, "‼ {}", head)?;
+            }
+            Head::TopLvl(x) => {
+                x.fmt(f)?;
+            }
+            Head::Coh(ctx, ty) => {
+                write!(f, "coh [{} : {}]", ctx, ty)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Display for Term {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-	    Term::Hole => {
-                f.write_str("_")?;
-            }
-            Term::App(t, a, ty) => {
+            Term::WithArgs(t, a, ty) => {
                 t.fmt(f)?;
                 a.fmt(f)?;
                 if let Some(typ) = ty {
                     write!(f, "<{}>", typ)?;
                 }
             }
-            Term::Susp(t) => {
-                write!(f, "‼({})", t)?;
-            }
             Term::Var(name) => {
                 name.0.fmt(f)?;
-            }
-            Term::Coh(ctx, ty) => {
-                write!(f, "coh [{} : {}]", ctx, ty)?;
             }
         }
         Ok(())
@@ -211,7 +208,6 @@ impl Display for Args {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::Meta => f.write_str("_"),
             Type::Base => f.write_str("*"),
             Type::Arr(s, a, t) => match a {
                 Some(a) => write!(f, "{a} | {s} -> {t}"),
@@ -228,13 +224,8 @@ impl Display for Ctx {
                 t.fmt(f)?;
             }
             Ctx::Other(xs) => {
-                for (name, ty, icit) in xs {
-                    match (&ty.0, icit) {
-                        (Some(typ), true) => write!(f, "{{{name} : {typ}}}")?,
-			(Some(typ), false) => write!(f, "({name} : {typ})")?,
-                        (None, true) => write!(f, "{{{name}}}")?,
-			(None, false) => name.fmt(f)?,
-                    };
+                for (name, ty) in xs {
+                    write!(f, "({name} : {ty})")?;
                 }
             }
         }

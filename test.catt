@@ -1,1 +1,1 @@
-‼( coh [(x(f)y(g)z) : x -> z]) (a,b)
+(a : *) (b : a -> a) coh [(x) : x -> x] (b)
