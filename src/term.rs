@@ -7,7 +7,7 @@ use crate::common::{Name, NoDispOption, Pos, Tree};
 pub enum TermT {
     App(Box<TermT>, ArgsWithTypeT),
     Var(Pos),
-    TopLvl(Name, #[derivative(PartialEq = "ignore")] Box<TermT>),
+    TopLvl(Name),
     Susp(Box<TermT>),
     Coh(Tree<NoDispOption<Name>>, Box<TypeT>),
 }

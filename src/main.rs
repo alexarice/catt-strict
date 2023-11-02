@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use ariadne::{Color, Label, Report, ReportKind, Source};
 use catt_strict::{
-    syntax::{ctx, term},
-    typecheck::Environment,
+    command::command,
+    typecheck::{Environment, Reduction, Support},
 };
 use chumsky::prelude::*;
 
@@ -11,39 +11,28 @@ fn main() {
     let filename = std::env::args().nth(1).unwrap();
     let src = std::fs::read_to_string(&filename).unwrap();
 
-    let parsed = ctx(term())
-        .padded()
-        .then(term().then_ignore(end()))
+    let parsed = command()
+        .separated_by(text::newline().repeated())
+        .then_ignore(end())
         .parse(src.trim());
 
     match parsed {
-        Ok((ctx, tm)) => {
-            println!("Parsed: {ctx} {tm}");
-
-	    let env = Environment {
+        Ok(cmds) => {
+            let mut env = Environment {
                 top_level: HashMap::new(),
-                local: HashMap::new(),
+                reduction: Reduction::None,
+                support: Support::FullInverse,
             };
 
-	    match ctx.to_env(&env).and_then(|(ctxt, local)| {
-		println!("Ctx: {ctxt:?}");
-		let new_env = Environment {
-		    top_level: HashMap::new(),
-		    local,
-		};
-		let x = tm.infer(&new_env)?;
-		Ok((new_env, x))
-	    }) {
-		Ok((new_env, (tmt, tyt))) => {
-		    println!("Term {tmt:#?}");
-		    println!("Type {tyt:#?}");
-
-		    println!("Norm: {:#?}", tmt.eval(&new_env.get_sem_ctx()).quote())
-		},
-		Err(err) => {
-		    println!("Error: {err:#?}");
-		},
-	    }
+            for cmd in cmds {
+                match cmd.run(&mut env) {
+                    Ok(()) => {}
+                    Err(err) => {
+                        println!("{err:?}");
+                        break;
+                    }
+                }
+            }
         }
         Err(errs) => errs.into_iter().for_each(|e| {
             Report::build(ReportKind::Error, &filename, e.span().start)

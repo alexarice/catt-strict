@@ -1,1 +1,3 @@
-(a : *) (b : a -> a) coh [(x) : x -> x] (b)
+let id = coh [(x) : x -> x]
+
+let test (a:*)(b: a -> a) = id(b)

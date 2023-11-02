@@ -108,7 +108,7 @@ pub struct Path(pub Vec<usize>);
 impl Path {
     pub fn susp(mut self, n: usize) -> Self {
         self.0.extend((0..).take(n));
-	self
+        self
     }
 
     pub fn de_susp(mut self) -> Self {

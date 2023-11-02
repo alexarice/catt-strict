@@ -57,7 +57,7 @@ where
     })
 }
 
-fn ident() -> impl Parser<char, Name, Error = Simple<char>> + Clone {
+pub fn ident() -> impl Parser<char, Name, Error = Simple<char>> + Clone {
     text::ident().padded().try_map(|x, span| {
         if x == "coh" || x == "let" || x == "_" {
             Err(Simple::custom(
@@ -70,7 +70,7 @@ fn ident() -> impl Parser<char, Name, Error = Simple<char>> + Clone {
     })
 }
 
-fn head<P>(term: P) -> impl Parser<char, Head, Error = Simple<char>> + Clone
+fn head_internal<P>(term: P) -> impl Parser<char, Head, Error = Simple<char>> + Clone
 where
     P: Parser<char, Term, Error = Simple<char>> + Clone + 'static,
 {
@@ -79,7 +79,7 @@ where
             .ignore_then(
                 tree(ident().padded().or_not().map(NoDispOption))
                     .padded()
-                    .then(just(":").ignore_then(ty(term.clone()).padded()))
+                    .then(just(":").ignore_then(ty_internal(term.clone()).padded()))
                     .delimited_by(just("["), just("]"))
                     .padded()
                     .map(|(ctx, ty)| Head::Coh(ctx, Box::new(ty))),
@@ -104,7 +104,7 @@ where
         .or(tree(term.or_not().map(NoDispOption).padded()).map(Args::Label))
 }
 
-fn ty<P>(term: P) -> impl Parser<char, Type, Error = Simple<char>> + Clone
+fn ty_internal<P>(term: P) -> impl Parser<char, Type, Error = Simple<char>> + Clone
 where
     P: Parser<char, Term, Error = Simple<char>> + Clone,
 {
@@ -128,7 +128,7 @@ where
         .foldl(|a, (s, t)| Type::Arr(s, Some(Box::new(a)), t))
 }
 
-pub fn ctx<P>(term: P) -> impl Parser<char, Ctx, Error = Simple<char>> + Clone
+fn ctx_internal<P>(term: P) -> impl Parser<char, Ctx, Error = Simple<char>> + Clone
 where
     P: Parser<char, Term, Error = Simple<char>> + Clone,
 {
@@ -136,29 +136,43 @@ where
         .map(Ctx::Tree)
         .or(ident()
             .padded()
-            .then(just(":").ignore_then(ty(term.clone()).padded()))
+            .then(just(":").ignore_then(ty_internal(term.clone()).padded()))
             .delimited_by(just("("), just(")"))
             .padded()
             .repeated()
+            .at_least(1)
             .map(Ctx::Other))
 }
 
 pub fn term() -> impl Parser<char, Term, Error = Simple<char>> + Clone {
     recursive(|term| {
-        ident().map(|x| Term::Var(x)).or(head(term.clone())
+        head_internal(term.clone())
             .padded()
             .then(
                 args(term.clone())
                     .then(
-                        ty(term)
+                        ty_internal(term)
                             .padded()
                             .delimited_by(just("<"), just(">"))
                             .or_not(),
                     )
                     .padded(),
             )
-            .map(|(head, (a, ty))| Term::WithArgs(head, a, ty.map(Box::new))))
+            .map(|(head, (a, ty))| Term::WithArgs(head, a, ty.map(Box::new)))
+            .or(ident().map(|x| Term::Var(x)))
     })
+}
+
+pub fn ty() -> impl Parser<char, Type, Error = Simple<char>> {
+    ty_internal(term())
+}
+
+pub fn head() -> impl Parser<char, Head, Error = Simple<char>> {
+    head_internal(term())
+}
+
+pub fn ctx() -> impl Parser<char, Ctx, Error = Simple<char>> {
+    ctx_internal(term())
 }
 
 impl Display for Head {
