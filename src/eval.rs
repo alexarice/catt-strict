@@ -23,7 +23,7 @@ impl SemCtx {
             positions
                 .map(|pos| (pos.clone(), TermN::Variable(pos)))
                 .collect(),
-            TypeN::Base,
+            TypeN::base(),
         )
     }
 
@@ -36,17 +36,17 @@ impl SemCtx {
     }
 
     pub fn restrict(mut self) -> Self {
-        let ty = TypeN::Arr(
+        let mut ty = self.ty;
+        ty.0.push((
             self.map
                 .remove(&Pos::Path(Path::here(0)))
                 .or(self.map.remove(&Pos::Level(0)))
                 .unwrap(),
-            Box::new(self.ty),
             self.map
                 .remove(&Pos::Path(Path::here(1)))
                 .or(self.map.remove(&Pos::Level(1)))
                 .unwrap(),
-        );
+        ));
 
         let map = self
             .map
@@ -59,18 +59,14 @@ impl SemCtx {
 }
 
 impl Tree<TermN> {
-    pub fn unrestrict(self, ty: TypeN) -> Self {
-        match ty {
-            TypeN::Base => self,
-            TypeN::Arr(s, a, t) => {
-                let new_tree = Tree {
-                    elements: vec![s, t],
-                    branches: vec![self],
-                };
-
-                new_tree.unrestrict(*a)
-            }
+    pub fn unrestrict(mut self, ty: TypeN) -> Self {
+        for (s, t) in ty.0.into_iter().rev() {
+            self = Tree {
+                elements: vec![s, t],
+                branches: vec![self],
+            };
         }
+        self
     }
 }
 
@@ -95,7 +91,7 @@ impl TermT {
                 TermN::Other(
                     HeadN {
                         tree,
-                        ty: Box::new(final_ty),
+                        ty: final_ty,
                         susp: dim,
                     },
                     args.unrestrict(sem_ty),
@@ -109,11 +105,11 @@ impl TypeT {
     pub fn eval(&self, ctx: &SemCtx, env: &Environment) -> TypeN {
         match &self {
             TypeT::Base => ctx.get_ty().clone(),
-            TypeT::Arr(s, a, t) => TypeN::Arr(
-                s.eval(ctx, env),
-                Box::new(a.eval(ctx, env)),
-                t.eval(ctx, env),
-            ),
+            TypeT::Arr(s, a, t) => {
+                let mut an = a.eval(ctx, env);
+                an.0.push((s.eval(ctx, env), t.eval(ctx, env)));
+                an
+            }
             TypeT::App(ty, awt) => ty.eval(&awt.eval(ctx, env), env),
             TypeT::Susp(ty) => ty.eval(&ctx.clone().restrict(), env),
         }
@@ -184,9 +180,12 @@ impl TermN {
 
 impl TypeN {
     pub fn quote(&self) -> TypeT {
-        match self {
-            TypeN::Base => TypeT::Base,
-            TypeN::Arr(s, a, t) => TypeT::Arr(s.quote(), Box::new(a.quote()), t.quote()),
+        let mut ret = TypeT::Base;
+
+        for (s, t) in &self.0 {
+            ret = TypeT::Arr(s.quote(), Box::new(ret), t.quote())
         }
+
+        ret
     }
 }

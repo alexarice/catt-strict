@@ -1,9 +1,9 @@
-use crate::common::{Name, NoDispOption, Path, Pos, Tree};
+use crate::common::{Name, NoDispOption, Pos, Tree};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HeadN {
     pub tree: Tree<NoDispOption<Name>>,
-    pub ty: Box<TypeN>,
+    pub ty: TypeN,
     pub susp: usize,
 }
 
@@ -14,10 +14,7 @@ pub enum TermN {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TypeN {
-    Base,
-    Arr(TermN, Box<TypeN>, TermN),
-}
+pub struct TypeN(pub Vec<(TermN, TermN)>);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CtxN {
@@ -26,33 +23,11 @@ pub enum CtxN {
 }
 
 impl TypeN {
-    pub fn base(&self) -> Option<&TypeN> {
-        match self {
-            TypeN::Base => None,
-            TypeN::Arr(_, a, _) => Some(a),
-        }
-    }
-    pub fn dim(&self) -> usize {
-        let mut ty = self;
-        let mut dim = 0;
-        while let Some(b) = ty.base() {
-            ty = b;
-            dim += 1;
-        }
-        dim
+    pub fn base() -> TypeN {
+        TypeN(vec![])
     }
 
-    pub fn susp_base(n: usize) -> TypeN {
-        if n <= 0 {
-            TypeN::Base
-        } else {
-            TypeN::Arr(
-                TermN::Variable(Pos::Path(Path(vec![0; n]))),
-                Box::new(Self::susp_base(n - 1)),
-                TermN::Variable(Pos::Path(Path(
-                    std::iter::once(1).chain((0..).take(n - 1)).collect(),
-                ))),
-            )
-        }
+    pub fn dim(&self) -> usize {
+        self.0.len()
     }
 }

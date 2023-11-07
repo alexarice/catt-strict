@@ -160,28 +160,37 @@ impl Type {
         local: &HashMap<Name, (Pos, TypeT)>,
         ty: &TypeN,
     ) -> Result<(), TypeCheckError> {
-        match (self, ty) {
-            (Type::Base, TypeN::Base) => Ok(()),
-            (Type::Base, TypeN::Arr(_, _, _)) => Err(TypeCheckError::DimensionMismatch),
-            (Type::Arr(_, _, _), TypeN::Base) => Err(TypeCheckError::DimensionMismatch),
-            (Type::Arr(s1, ty1, t1), TypeN::Arr(s2, ty2, t2)) => {
-                let sem_ctx = SemCtx::from_map(local);
-                let (s1t, _) = s1.infer(env, local)?;
-                let s1n = s1t.eval(&sem_ctx, env);
-                if &s1n != s2 {
-                    return Err(TypeCheckError::TermMismatch(s1n, s2.clone()));
+        let mut to_check = self;
+
+        for (s2, t2) in ty.0.iter().rev() {
+            match to_check {
+                Type::Base => return Err(TypeCheckError::DimensionMismatch),
+                Type::Arr(s1, a, t1) => {
+                    let sem_ctx = SemCtx::from_map(local);
+                    let (s1t, _) = s1.infer(env, local)?;
+                    let s1n = s1t.eval(&sem_ctx, env);
+                    if &s1n != s2 {
+                        return Err(TypeCheckError::TermMismatch(s1n, s2.clone()));
+                    }
+                    let (t1t, _) = t1.infer(env, local)?;
+                    let t1n = t1t.eval(&sem_ctx, env);
+                    if &t1n != t2 {
+                        return Err(TypeCheckError::TermMismatch(t1n, t2.clone()));
+                    }
+                    if let Some(ty) = a {
+                        to_check = &*ty;
+                    } else {
+                        to_check = &Type::Base;
+                        break;
+                    }
                 }
-                let (t1t, _) = t1.infer(env, local)?;
-                let t1n = t1t.eval(&sem_ctx, env);
-                if &t1n != t2 {
-                    return Err(TypeCheckError::TermMismatch(t1n, t2.clone()));
-                }
-                if let Some(ty) = ty1 {
-                    ty.check(env, local, ty2)?;
-                }
-                Ok(())
             }
         }
+        if to_check != &Type::Base {
+            return Err(TypeCheckError::DimensionMismatch);
+        }
+
+        Ok(())
     }
 }
 
@@ -213,22 +222,19 @@ impl Label {
         let mut el_norm = vec![];
         let mut ty = None;
         for br in &self.branches {
-            let (l, ty1) = br.infer(env, local)?;
+            let (l, mut ty1) = br.infer(env, local)?;
             branches.push(l);
-            match ty1 {
-                TypeN::Base => return Err(TypeCheckError::DimensionMismatch),
-                TypeN::Arr(s, a, t) => {
-                    if let Some(s1) = el_norm.last() {
-                        if &s != s1 {
-                            return Err(TypeCheckError::TermMismatch(s, s1.clone()));
-                        }
-                    } else {
-                        el_norm.push(s);
-                    }
-                    el_norm.push(t);
-                    ty.get_or_insert(*a);
+
+            let (s, t) = ty1.0.pop().ok_or(TypeCheckError::DimensionMismatch)?;
+            if let Some(s1) = el_norm.last() {
+                if &s != s1 {
+                    return Err(TypeCheckError::TermMismatch(s, s1.clone()));
                 }
+            } else {
+                el_norm.push(s);
             }
+            el_norm.push(t);
+            ty.get_or_insert(ty1);
         }
 
         let elements = self
