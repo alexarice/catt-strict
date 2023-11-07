@@ -44,7 +44,7 @@ pub struct Environment {
 
 impl SemCtx {
     pub fn from_map(local: &HashMap<Name, (Pos, TypeT)>) -> Self {
-        SemCtx::id(local.values().map(|(pos, _)| pos.clone()), 0)
+        SemCtx::id(local.values().map(|(pos, _)| pos.clone()))
     }
 }
 

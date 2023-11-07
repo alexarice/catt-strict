@@ -1,8 +1,10 @@
 use crate::common::{Name, NoDispOption, Path, Pos, Tree};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum HeadN {
-    Coh(Tree<NoDispOption<Name>>, Box<TypeN>),
+pub struct HeadN {
+    pub tree: Tree<NoDispOption<Name>>,
+    pub ty: Box<TypeN>,
+    pub susp: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -92,27 +92,29 @@ impl<T> Tree<T> {
     }
 
     pub fn path_tree(&self) -> Tree<Path> {
-	self.path_tree_helper(&Path(vec![]))
+        self.path_tree_helper(&Path(vec![]))
     }
 
     pub fn path_tree_helper(&self, start: &Path) -> Tree<Path> {
-	let elements = (0..self.elements.len()).map(|i| start.clone().extend(i)).collect();
+        let elements = (0..self.elements.len())
+            .map(|i| start.clone().extend(i))
+            .collect();
 
-	let branches = if self.branches.is_empty() {
-	    vec![]
-	} else {
-	    let mut current = start.clone().extend(0);
-	    self.branches.iter().map(|br| {
-		let x = br.path_tree_helper(&current);
-		*current.0.last_mut().unwrap() += 1;
-		x
-	    }).collect()
-	};
+        let branches = if self.branches.is_empty() {
+            vec![]
+        } else {
+            let mut current = start.clone().extend(0);
+            self.branches
+                .iter()
+                .map(|br| {
+                    let x = br.path_tree_helper(&current);
+                    *current.0.last_mut().unwrap() += 1;
+                    x
+                })
+                .collect()
+        };
 
-	Tree {
-	    elements,
-	    branches,
-	}
+        Tree { elements, branches }
     }
 
     pub fn susp(self) -> Self

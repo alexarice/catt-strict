@@ -18,10 +18,10 @@ impl SemCtx {
         SemCtx { map, ty }
     }
 
-    pub fn id(positions: impl Iterator<Item = Pos>, susp: usize) -> Self {
+    pub fn id(positions: impl Iterator<Item = Pos>) -> Self {
         SemCtx::new(
             positions
-                .map(|pos| (pos.clone(), TermN::Variable(pos.susp(susp))))
+                .map(|pos| (pos.clone(), TermN::Variable(pos)))
                 .collect(),
             TypeN::Base,
         )
@@ -85,21 +85,19 @@ impl TermT {
                 let sem_ty = ctx.get_ty();
                 let dim = sem_ty.dim();
 
-                let new_ctx =
-                    SemCtx::id(tr.get_paths().into_iter().map(|(p, _)| Pos::Path(p)), dim);
-                let mut tree = tr.clone();
-                for _ in 0..dim {
-                    tree = tree.susp();
-                }
+                let new_ctx = SemCtx::id(tr.get_paths().into_iter().map(|(p, _)| Pos::Path(p)));
+                let tree = tr.clone();
 
-                let args = tr.path_tree().map(&|p| {
-		    ctx.get(&Pos::Path(p))
-		});
+                let args = tr.path_tree().map(&|p| ctx.get(&Pos::Path(p)));
 
                 let final_ty = ty.eval(&new_ctx, env);
 
                 TermN::Other(
-                    HeadN::Coh(tree, Box::new(final_ty)),
+                    HeadN {
+                        tree,
+                        ty: Box::new(final_ty),
+                        susp: dim,
+                    },
                     args.unrestrict(sem_ty),
                 )
             }
@@ -158,7 +156,13 @@ impl ArgsT {
 impl HeadN {
     pub fn quote(&self) -> TermT {
         match self {
-            HeadN::Coh(tr, ty) => TermT::Coh(tr.clone(), Box::new(ty.quote())),
+            HeadN { tree, ty, susp } => {
+                let mut x = TermT::Coh(tree.clone(), Box::new(ty.quote()));
+                for _ in 0..*susp {
+                    x = TermT::Susp(Box::new(x));
+                }
+                x
+            }
         }
     }
 }
