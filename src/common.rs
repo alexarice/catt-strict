@@ -73,22 +73,46 @@ impl<T> Tree<T> {
         Some(Tree { elements, branches })
     }
 
-    pub fn map<U, S>(&self, f: &U) -> Tree<S>
+    pub fn map_ref<U, S>(&self, f: &U) -> Tree<S>
     where
         U: Fn(&T) -> S,
     {
-        let branches = self.branches.iter().map(|br| br.map(f)).collect();
+        let branches = self.branches.iter().map(|br| br.map_ref(f)).collect();
         let elements = self.elements.iter().map(f).collect();
         Tree { branches, elements }
     }
 
-    pub fn from_paths<I, S>(&self, iter: &mut I) -> Tree<S>
+    pub fn map<U, S>(self, f: &U) -> Tree<S>
     where
-        I: Iterator<Item = S>,
+        U: Fn(T) -> S,
     {
-        let elements = iter.by_ref().take(self.elements.len()).collect();
-        let branches = self.branches.iter().map(|br| br.from_paths(iter)).collect();
-        Tree { elements, branches }
+        let branches = self.branches.into_iter().map(|br| br.map(f)).collect();
+        let elements = self.elements.into_iter().map(f).collect();
+        Tree { branches, elements }
+    }
+
+    pub fn path_tree(&self) -> Tree<Path> {
+	self.path_tree_helper(&Path(vec![]))
+    }
+
+    pub fn path_tree_helper(&self, start: &Path) -> Tree<Path> {
+	let elements = (0..self.elements.len()).map(|i| start.clone().extend(i)).collect();
+
+	let branches = if self.branches.is_empty() {
+	    vec![]
+	} else {
+	    let mut current = start.clone().extend(0);
+	    self.branches.iter().map(|br| {
+		let x = br.path_tree_helper(&current);
+		*current.0.last_mut().unwrap() += 1;
+		x
+	    }).collect()
+	};
+
+	Tree {
+	    elements,
+	    branches,
+	}
     }
 
     pub fn susp(self) -> Self

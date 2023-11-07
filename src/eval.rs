@@ -92,12 +92,9 @@ impl TermT {
                     tree = tree.susp();
                 }
 
-                let args = tr.from_paths(
-                    &mut tr
-                        .get_paths()
-                        .into_iter()
-                        .map(|(p, _)| ctx.get(&Pos::Path(p)).clone()),
-                );
+                let args = tr.path_tree().map(&|p| {
+		    ctx.get(&Pos::Path(p))
+		});
 
                 let final_ty = ty.eval(&new_ctx, env);
 
@@ -173,7 +170,7 @@ impl TermN {
             TermN::Other(head, args) => TermT::App(
                 Box::new(head.quote()),
                 ArgsWithTypeT {
-                    args: ArgsT::Label(args.map(&|tm| tm.quote())),
+                    args: ArgsT::Label(args.map_ref(&|tm| tm.quote())),
                     ty: Box::new(TypeT::Base),
                 },
             ),
