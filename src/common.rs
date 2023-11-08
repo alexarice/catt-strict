@@ -33,6 +33,25 @@ pub struct Tree<T> {
 }
 
 impl<T> Tree<T> {
+    pub fn susp_level(&self) -> usize {
+        if self.branches.len() == 1 {
+            1 + self.branches[0].susp_level()
+        } else {
+            0
+        }
+    }
+
+    pub fn get_maximal_elements(&self) -> Vec<&T> {
+        if self.branches.is_empty() {
+            vec![self.elements.last().unwrap().clone()]
+        } else {
+            self.branches
+                .iter()
+                .flat_map(|br| br.get_maximal_elements())
+                .collect()
+        }
+    }
+
     pub fn get_paths(&self) -> Vec<(Path, &T)> {
         self.elements
             .iter()
@@ -137,8 +156,11 @@ impl Path {
         self
     }
 
-    pub fn de_susp(mut self) -> Self {
-        self.0.pop();
+    pub fn de_susp(mut self, d: usize) -> Self {
+        for _ in 0..d {
+            self.0.pop();
+        }
+
         self
     }
 
@@ -186,7 +208,7 @@ impl Pos {
     pub fn de_susp(self) -> Self {
         match self {
             Pos::Level(l) => Pos::Level(l - 2),
-            Pos::Path(p) => Pos::Path(p.de_susp()),
+            Pos::Path(p) => Pos::Path(p.de_susp(1)),
         }
     }
 }

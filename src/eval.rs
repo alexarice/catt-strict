@@ -82,17 +82,23 @@ impl TermT {
                 let dim = sem_ty.dim();
 
                 let new_ctx = SemCtx::id(tr.get_paths().into_iter().map(|(p, _)| Pos::Path(p)));
-                let tree = tr.clone();
 
                 let args = tr.path_tree().map(&|p| ctx.get(&Pos::Path(p)));
 
-                let final_ty = ty.eval(&new_ctx, env);
+                let tyn = ty.eval(&new_ctx, env);
+
+                let (final_ty, ty_susp) = tyn.de_susp(tr.susp_level());
+
+                let mut tree = tr.clone();
+                for _ in 0..ty_susp {
+                    tree = tree.branches.remove(0);
+                }
 
                 TermN::Other(
                     HeadN {
                         tree,
                         ty: final_ty,
-                        susp: dim,
+                        susp: dim + ty_susp,
                     },
                     args.unrestrict(sem_ty),
                 )
