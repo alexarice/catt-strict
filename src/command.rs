@@ -55,6 +55,7 @@ impl Command {
             Command::LetCtx(nm, ctx, tm) => {
                 let (ctxt, local) = ctx.check(env)?;
                 let (tmt, tyt) = tm.infer(env, &local)?;
+		println!("{:?}", tmt.eval(&SemCtx::from_map(&local), env));
                 env.top_level.insert(nm, (ctxt, tmt, tyt));
             }
             Command::LetWT(nm, ctx, ty, tm) => {

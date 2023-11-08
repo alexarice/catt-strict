@@ -1,3 +1,7 @@
 let id = coh [(x) : x -> x]
 
 let test (a:*)(b: a -> a) = id(b)
+
+let id2 = coh [(x(f)y): f -> f]
+
+let test2 (a:*) (b: a-> a) = id2(b)
