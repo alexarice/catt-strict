@@ -5,3 +5,7 @@ let test (a:*)(b: a -> a) = id(b)
 let id2 = coh [(x(f)y): f -> f]
 
 let test2 (a:*) (b: a-> a) = id2(b)
+
+let disc = coh[(x(f)y): x -> y]
+
+let test3 (a: *) (b: a -> a) = disc(b)

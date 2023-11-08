@@ -33,6 +33,10 @@ pub struct Tree<T> {
 }
 
 impl<T> Tree<T> {
+    pub fn is_disc(&self) -> bool {
+        self.branches.is_empty() || (self.branches.len() == 1 && self.branches[0].is_disc())
+    }
+
     pub fn susp_level(&self) -> usize {
         if self.branches.len() == 1 {
             1 + self.branches[0].susp_level()
@@ -48,6 +52,18 @@ impl<T> Tree<T> {
             self.branches
                 .iter()
                 .flat_map(|br| br.get_maximal_elements())
+                .collect()
+        }
+    }
+
+    pub fn get_maximal_paths(&self) -> Vec<Path> {
+        if self.branches.is_empty() {
+            vec![Path::here(0)]
+        } else {
+            self.branches
+                .iter()
+                .enumerate()
+                .flat_map(|(i, br)| br.get_maximal_paths().into_iter().map(move |p| p.extend(i)))
                 .collect()
         }
     }

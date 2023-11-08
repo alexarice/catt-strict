@@ -25,10 +25,8 @@ impl Tree<NoDispOption<Name>> {
     }
 }
 
-pub enum Reduction {
-    None,
-    // SU,
-    // SUA,
+pub struct Reduction {
+    pub disc_rem: bool,
 }
 
 pub enum Support {

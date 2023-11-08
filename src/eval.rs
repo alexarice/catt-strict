@@ -83,16 +83,28 @@ impl TermT {
 
                 let new_ctx = SemCtx::id(tr.get_paths().into_iter().map(|(p, _)| Pos::Path(p)));
 
-                let args = tr.path_tree().map(&|p| ctx.get(&Pos::Path(p)));
-
                 let tyn = ty.eval(&new_ctx, env);
 
                 let (final_ty, ty_susp) = tyn.de_susp(tr.susp_level());
+
+                if env.reduction.disc_rem {
+                    if tr.is_disc()
+                        && final_ty
+                            == TypeN(vec![(
+                                TermN::Variable(Pos::Path(Path::here(0))),
+                                TermN::Variable(Pos::Path(Path::here(1))),
+                            )])
+                    {
+                        return ctx.get(&Pos::Path(tr.get_maximal_paths().remove(0)));
+                    }
+                }
 
                 let mut tree = tr.clone();
                 for _ in 0..ty_susp {
                     tree = tree.branches.remove(0);
                 }
+
+                let args = tr.path_tree().map(&|p| ctx.get(&Pos::Path(p)));
 
                 TermN::Other(
                     HeadN {
