@@ -37,6 +37,15 @@ impl<T> Tree<T> {
         self.branches.is_empty() || (self.branches.len() == 1 && self.branches[0].is_disc())
     }
 
+    pub fn dim(&self) -> usize {
+        self.branches
+            .iter()
+            .map(|br| br.dim())
+            .max()
+            .map(|x| x + 1)
+            .unwrap_or_default()
+    }
+
     pub fn susp_level(&self) -> usize {
         if self.branches.len() == 1 {
             1 + self.branches[0].susp_level()
@@ -127,27 +136,13 @@ impl<T> Tree<T> {
     }
 
     pub fn path_tree(&self) -> Tree<Path> {
-        self.path_tree_helper(&Path(vec![]))
-    }
-
-    pub fn path_tree_helper(&self, start: &Path) -> Tree<Path> {
-        let elements = (0..self.elements.len())
-            .map(|i| start.clone().extend(i))
+        let elements = (0..self.elements.len()).map(|i| Path::here(i)).collect();
+        let branches = self
+            .branches
+            .iter()
+            .enumerate()
+            .map(|(i, br)| br.path_tree().map(&|p| p.extend(i)))
             .collect();
-
-        let branches = if self.branches.is_empty() {
-            vec![]
-        } else {
-            let mut current = start.clone().extend(0);
-            self.branches
-                .iter()
-                .map(|br| {
-                    let x = br.path_tree_helper(&current);
-                    *current.0.last_mut().unwrap() += 1;
-                    x
-                })
-                .collect()
-        };
 
         Tree { elements, branches }
     }
@@ -193,7 +188,7 @@ impl Path {
         let mut ty = TypeT::Base;
         let mut current_path = Path(vec![]);
 
-        for x in &self.0[0..self.0.len() - 1] {
+        for x in self.0[1..self.0.len()].iter().rev() {
             let snd = current_path.clone().extend(x + 1);
             current_path = current_path.extend(*x);
 

@@ -27,6 +27,7 @@ impl Tree<NoDispOption<Name>> {
 
 pub struct Reduction {
     pub disc_rem: bool,
+    pub endo_coh: bool,
 }
 
 pub enum Support {
@@ -38,12 +39,6 @@ pub struct Environment {
     pub top_level: HashMap<Name, (CtxT, TermT, TypeT)>,
     pub reduction: Reduction,
     pub support: Support,
-}
-
-impl SemCtx {
-    pub fn from_map(local: &HashMap<Name, (Pos, TypeT)>) -> Self {
-        SemCtx::id(local.values().map(|(pos, _)| pos.clone()))
-    }
 }
 
 #[derive(Error, Debug)]
@@ -79,11 +74,9 @@ impl Term {
                 .ok_or(TypeCheckError::UnknownVariable(x.clone())),
             Term::WithArgs(head, args, aty) => {
                 let (ctx, tm, ty) = head.infer(&env)?;
-
                 let awt = args.infer(env, local, &ctx)?;
-
                 if let Some(t) = aty {
-                    t.check(env, local, &awt.ty.eval(&SemCtx::from_map(local), env))?;
+                    t.check(env, local, &awt.ty.eval(&SemCtx::id(), env))?;
                 }
 
                 Ok((
@@ -114,7 +107,6 @@ impl Head {
                 .ok_or(TypeCheckError::UnknownTopLevel(x.clone())),
             Head::Coh(tr, ty) => {
                 let tyt = ty.infer(&env, &tr.to_map())?;
-
                 // TODO: Support check
 
                 Ok((
@@ -138,7 +130,7 @@ impl Type {
             Type::Arr(s, a, t) => {
                 let (st, ty1) = s.infer(env, local)?;
                 let (tt, ty2) = t.infer(env, local)?;
-                let sem_ctx = SemCtx::from_map(local);
+                let sem_ctx = SemCtx::id();
                 let ty1n = ty1.eval(&sem_ctx, env);
                 let ty2n = ty2.eval(&sem_ctx, env);
                 if ty1n != ty2n {
@@ -164,7 +156,7 @@ impl Type {
             match to_check {
                 Type::Base => return Err(TypeCheckError::DimensionMismatch),
                 Type::Arr(s1, a, t1) => {
-                    let sem_ctx = SemCtx::from_map(local);
+                    let sem_ctx = SemCtx::id();
                     let (s1t, _) = s1.infer(env, local)?;
                     let s1n = s1t.eval(&sem_ctx, env);
                     if &s1n != s2 {
@@ -213,7 +205,7 @@ impl Label {
                 .as_ref()
                 .ok_or(TypeCheckError::LocMaxMissing)?
                 .infer(env, local)?;
-            return Ok((Tree::singleton(tm), ty.eval(&SemCtx::from_map(local), env)));
+            return Ok((Tree::singleton(tm), ty.eval(&SemCtx::id(), env)));
         }
 
         let mut branches = vec![];
@@ -242,7 +234,7 @@ impl Label {
             .map(|(el, eln)| match &el.0 {
                 Some(tm) => {
                     let tmt = tm.infer(env, local)?.0;
-                    let tmn = tmt.eval(&SemCtx::from_map(local), env);
+                    let tmn = tmt.eval(&SemCtx::id(), env);
                     if tmn != eln {
                         Err(TypeCheckError::TermMismatch(tmn, eln))
                     } else {
@@ -277,7 +269,7 @@ impl Args {
                     ty: Box::new(tys[0].clone()),
                 };
 
-                let sem_ctx = SemCtx::from_map(local);
+                let sem_ctx = SemCtx::id();
 
                 let args_sem_ctx = awt.eval(&sem_ctx, env);
 

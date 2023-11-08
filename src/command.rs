@@ -49,19 +49,22 @@ impl Command {
     pub fn run(self, env: &mut Environment) -> Result<(), TypeCheckError> {
         match self {
             Command::LetHead(nm, h) => {
+                println!("Checking {nm}");
                 let x = h.infer(env)?;
                 env.top_level.insert(nm, x);
             }
             Command::LetCtx(nm, ctx, tm) => {
+                println!("Checking {nm}");
                 let (ctxt, local) = ctx.check(env)?;
                 let (tmt, tyt) = tm.infer(env, &local)?;
-                println!("{:?}", tmt.eval(&SemCtx::from_map(&local), env));
+                println!("{:#?}", tmt.eval(&SemCtx::id(), env));
                 env.top_level.insert(nm, (ctxt, tmt, tyt));
             }
             Command::LetWT(nm, ctx, ty, tm) => {
+                println!("Checking {nm}");
                 let (ctxt, local) = ctx.check(env)?;
                 let (tmt, tyt) = tm.infer(env, &local)?;
-                ty.check(env, &local, &tyt.eval(&SemCtx::from_map(&local), env))?;
+                ty.check(env, &local, &tyt.eval(&SemCtx::id(), env))?;
                 env.top_level.insert(nm, (ctxt, tmt, tyt));
             }
         }

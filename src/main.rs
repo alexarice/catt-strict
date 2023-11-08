@@ -20,7 +20,10 @@ fn main() {
         Ok(cmds) => {
             let mut env = Environment {
                 top_level: HashMap::new(),
-                reduction: Reduction { disc_rem: true },
+                reduction: Reduction {
+                    disc_rem: true,
+                    endo_coh: true,
+                },
                 support: Support::FullInverse,
             };
 

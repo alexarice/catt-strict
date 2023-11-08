@@ -9,3 +9,9 @@ let test2 (a:*) (b: a-> a) = id2(b)
 let disc = coh[(x(f)y): x -> y]
 
 let test3 (a: *) (b: a -> a) = disc(b)
+
+let comp = coh[(x(f)y(g)z): x -> z]
+
+let endo = coh[(x(f)y(g)z): comp(f,g) -> comp(f,g)]
+
+let test4 (a: *) (b: a -> a) = endo(b,b)

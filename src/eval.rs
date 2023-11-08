@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    common::{Path, Pos, Tree},
+    common::{NoDispOption, Path, Pos, Tree},
     normal::{HeadN, TermN, TypeN},
     term::{ArgsT, ArgsWithTypeT, TermT, TypeT},
     typecheck::Environment,
@@ -18,17 +18,15 @@ impl SemCtx {
         SemCtx { map, ty }
     }
 
-    pub fn id(positions: impl Iterator<Item = Pos>) -> Self {
-        SemCtx::new(
-            positions
-                .map(|pos| (pos.clone(), TermN::Variable(pos)))
-                .collect(),
-            TypeN::base(),
-        )
+    pub fn id() -> Self {
+        SemCtx::new(HashMap::new(), TypeN::base())
     }
 
     pub fn get(&self, pos: &Pos) -> TermN {
-        self.map.get(&pos).unwrap().clone()
+        self.map
+            .get(&pos)
+            .cloned()
+            .unwrap_or(TermN::Variable(pos.clone()))
     }
 
     pub fn get_ty(&self) -> TypeN {
@@ -81,14 +79,20 @@ impl TermT {
                 let sem_ty = ctx.get_ty();
                 let dim = sem_ty.dim();
 
-                let new_ctx = SemCtx::id(tr.get_paths().into_iter().map(|(p, _)| Pos::Path(p)));
+                let new_ctx = SemCtx::id();
 
                 let tyn = ty.eval(&new_ctx, env);
 
                 let (final_ty, ty_susp) = tyn.de_susp(tr.susp_level());
 
+                let mut tree = tr.clone();
+                for _ in 0..ty_susp {
+                    tree = tree.branches.remove(0);
+                }
+
                 if env.reduction.disc_rem {
-                    if tr.is_disc()
+                    if tree.is_disc()
+                        && tree.dim() == 1
                         && final_ty
                             == TypeN(vec![(
                                 TermN::Variable(Pos::Path(Path::here(0))),
@@ -99,9 +103,41 @@ impl TermT {
                     }
                 }
 
-                let mut tree = tr.clone();
-                for _ in 0..ty_susp {
-                    tree = tree.branches.remove(0);
+                if env.reduction.endo_coh {
+                    if final_ty.0.last().is_some_and(|(s, t)| s == t) {
+                        if tree.dim() != 0
+                            || final_ty
+                                != TypeN(vec![(
+                                    TermN::Variable(Pos::Path(Path::here(0))),
+                                    TermN::Variable(Pos::Path(Path::here(0))),
+                                )])
+                        {
+                            // Not already an identity
+
+                            match final_ty.quote() {
+                                TypeT::Arr(s, a, _) => {
+                                    let new_args_with_ty = ArgsWithTypeT {
+                                        args: ArgsT::Label(Tree::singleton(s)),
+                                        ty: a,
+                                    };
+                                    let tmt = TermT::App(
+                                        Box::new(TermT::Coh(
+                                            Tree::singleton(NoDispOption(None)),
+                                            Box::new(TypeT::Arr(
+                                                TermT::Var(Pos::Path(Path::here(0))),
+                                                Box::new(TypeT::Base),
+                                                TermT::Var(Pos::Path(Path::here(0))),
+                                            )),
+                                        )),
+                                        new_args_with_ty,
+                                    );
+
+                                    return tmt.eval(ctx, env);
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                    }
                 }
 
                 let args = tr.path_tree().map(&|p| ctx.get(&Pos::Path(p)));
