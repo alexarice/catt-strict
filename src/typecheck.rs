@@ -194,7 +194,7 @@ impl Type {
 
 impl Label {
     pub fn from_sub<T>(sub: &Sub, tree: &Tree<T>) -> Result<Self, TypeCheckError> {
-        let mut iter = sub.iter();
+        let mut iter = sub.iter().cloned();
         tree.label_from_max(&mut iter)
             .ok_or(TypeCheckError::LabelSub)
     }
@@ -215,7 +215,6 @@ impl Label {
                 .check(env, local)?;
             return Ok((Tree::singleton(tm), ty.eval(&SemCtx::id(), env)));
         }
-
         let mut branches = vec![];
         let mut el_norm = vec![];
         let mut ty = None;

@@ -107,7 +107,7 @@ impl<T> Tree<T> {
 
     pub fn label_from_max<'a, S: Clone + 'a>(
         &self,
-        iter: &mut impl Iterator<Item = &'a S>,
+        iter: &mut impl Iterator<Item = S>,
     ) -> Option<Tree<NoDispOption<S>>> {
         if self.branches.is_empty() {
             return iter
@@ -164,49 +164,82 @@ impl<T> Tree<T> {
             branches: vec![self],
         }
     }
+
+    pub fn lookup(&self, p: &Path) -> Option<&T> {
+        let mut tr = self;
+        for x in p.path.iter().rev() {
+            tr = tr.branches.get(*x)?;
+        }
+        tr.elements.get(p.here)
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct Path(pub Vec<usize>);
+pub struct Path {
+    pub here: usize,
+    pub path: Vec<usize>,
+}
 
 impl Path {
     pub fn susp(mut self, n: usize) -> Self {
-        self.0.extend((0..).take(n));
+        self.path.extend((0..).take(n));
         self
     }
 
     pub fn de_susp(mut self, d: usize) -> Self {
         for _ in 0..d {
-            self.0.pop();
+            self.path.pop();
         }
 
         self
     }
 
     pub fn here(n: usize) -> Self {
-        Path(vec![n])
+        Path {
+            here: n,
+            path: vec![],
+        }
     }
 
     pub fn extend(mut self, n: usize) -> Path {
-        self.0.push(n);
+        self.path.push(n);
         self
     }
 
     pub fn to_type(&self) -> TypeT {
         let mut ty = TypeT::Base;
-        let mut current_path = Path(vec![]);
+        let mut current_path = vec![];
 
-        for x in self.0[1..self.0.len()].iter().rev() {
-            let snd = current_path.clone().extend(x + 1);
-            current_path = current_path.extend(*x);
+        for x in self.path.iter().rev() {
+            let fst = Path {
+                here: *x,
+                path: current_path.clone(),
+            };
+
+            let snd = Path {
+                here: x + 1,
+                path: current_path.clone(),
+            };
+
+            current_path.push(*x);
 
             ty = TypeT::Arr(
-                TermT::Var(Pos::Path(current_path.clone())),
+                TermT::Var(Pos::Path(fst)),
                 Box::new(ty),
                 TermT::Var(Pos::Path(snd)),
             )
         }
         ty
+    }
+}
+
+impl Display for Path {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for x in self.path.iter().rev() {
+            write!(f, "{x}")?;
+        }
+        write!(f, "{}", self.here)?;
+        Ok(())
     }
 }
 
@@ -228,6 +261,15 @@ impl Pos {
         match self {
             Pos::Level(l) => Pos::Level(l - 2),
             Pos::Path(p) => Pos::Path(p.de_susp(1)),
+        }
+    }
+}
+
+impl Display for Pos {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Pos::Level(l) => write!(f, "l{l}"),
+            Pos::Path(p) => write!(f, "p{p}"),
         }
     }
 }

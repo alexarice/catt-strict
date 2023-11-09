@@ -25,7 +25,7 @@ pub enum CtxN {
 impl TermN {
     fn susp_level(&self) -> usize {
         match self {
-            TermN::Variable(Pos::Path(p)) => p.0.len() - 1,
+            TermN::Variable(Pos::Path(p)) => p.path.len(),
             TermN::Variable(Pos::Level(_)) => 0,
             TermN::Other(h, a) => std::cmp::min(
                 h.susp,

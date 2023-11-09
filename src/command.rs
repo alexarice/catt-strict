@@ -11,6 +11,7 @@ pub enum Command {
     LetHead(Name, Term),
     LetCtx(Name, Ctx, Term),
     LetWT(Name, Ctx, Type, Term),
+    Normalise(Ctx, Term),
 }
 
 pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
@@ -43,29 +44,47 @@ pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
                 .map(move |((ctx, ty), tm)| Command::LetWT(id.clone(), ctx, ty, tm))
                 .boxed(),
         })
+        .or(just("normalise ")
+            .ignore_then(ctx())
+            .then(just("|").padded().ignore_then(term()))
+            .map(|(ctx, tm)| Command::Normalise(ctx, tm)))
 }
 
 impl Command {
     pub fn run(self, env: &mut Environment) -> Result<(), TypeCheckError> {
+        println!("----------------------------------------");
         match self {
             Command::LetHead(nm, h) => {
-                println!("Checking {nm}");
+                println!("Inferring {nm}");
                 let x = h.infer(env)?;
+                println!("{}", x.1.to_expr(Some(&x.0), false));
+                println!("  has type {}", x.2.to_expr(Some(&x.0), false));
                 env.top_level.insert(nm, x);
             }
             Command::LetCtx(nm, ctx, tm) => {
                 println!("Checking {nm}");
                 let (ctxt, local) = ctx.check(env)?;
                 let (tmt, tyt) = tm.check(env, &local)?;
-                println!("{:#?}", tmt.eval(&SemCtx::id(), env));
+                println!("{}", tmt.to_expr(Some(&ctxt), false));
+                println!("  has type {}", tyt.to_expr(Some(&ctxt), false));
+
                 env.top_level.insert(nm, (ctxt, tmt, tyt));
             }
             Command::LetWT(nm, ctx, ty, tm) => {
-                println!("Checking {nm}");
+                println!("Checking {nm} has type {ty}");
                 let (ctxt, local) = ctx.check(env)?;
                 let (tmt, tyt) = tm.check(env, &local)?;
                 ty.check(env, &local, &tyt.eval(&SemCtx::id(), env))?;
+                println!("Checked {}", tmt.to_expr(Some(&ctxt), false));
                 env.top_level.insert(nm, (ctxt, tmt, tyt));
+            }
+            Command::Normalise(ctx, tm) => {
+                println!("Normalising {tm}");
+                let (ctxt, local) = ctx.check(env)?;
+                let (tmt, _) = tm.check(env, &local)?;
+                let tmn = tmt.eval(&SemCtx::id(), env);
+                let quoted = tmn.quote();
+                println!("NF: {}", quoted.to_expr(Some(&ctxt), false));
             }
         }
         Ok(())
