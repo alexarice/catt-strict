@@ -4,13 +4,6 @@ use itertools::Itertools;
 use std::fmt::Display;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Head {
-    Susp(Box<Head>),
-    Var(Name),
-    Coh(Tree<NoDispOption<Name>>, Box<Type>),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArgsWithType {
     pub args: Args,
     pub ty: Option<Box<Type>>,
@@ -18,8 +11,10 @@ pub struct ArgsWithType {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Term {
-    Head(Head),
     App(Box<Term>, ArgsWithType),
+    Susp(Box<Term>),
+    Var(Name),
+    Coh(Tree<NoDispOption<Name>>, Box<Type>),
 }
 
 pub type Sub = Vec<Term>;
@@ -35,6 +30,8 @@ pub enum Args {
 pub enum Type {
     Base,
     Arr(Term, Option<Box<Type>>, Term),
+    App(Box<Type>, ArgsWithType),
+    Susp(Box<Type>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -76,25 +73,23 @@ pub fn ident() -> impl Parser<char, Name, Error = Simple<char>> + Clone {
     })
 }
 
-fn head_internal<P>(term: P) -> impl Parser<char, Head, Error = Simple<char>> + Clone
+fn atom<P>(term: P) -> impl Parser<char, Term, Error = Simple<char>> + Clone
 where
     P: Parser<char, Term, Error = Simple<char>> + Clone + 'static,
 {
-    recursive(|head| {
-        keyword("coh")
-            .ignore_then(
-                tree(ident().padded().or_not().map(NoDispOption))
-                    .padded()
-                    .then(just(":").ignore_then(ty_internal(term.clone()).padded()))
-                    .delimited_by(just("["), just("]"))
-                    .padded()
-                    .map(|(ctx, ty)| Head::Coh(ctx, Box::new(ty))),
-            )
-            .or(ident().map(|x| Head::Var(x)))
-            .or(just("‼")
-                .ignore_then(head.padded())
-                .map(|t| Head::Susp(Box::new(t))))
-    })
+    keyword("coh")
+        .ignore_then(
+            tree(ident().padded().or_not().map(NoDispOption))
+                .padded()
+                .then(just(":").ignore_then(ty_internal(term.clone()).padded()))
+                .delimited_by(just("["), just("]"))
+                .padded()
+                .map(|(ctx, ty)| Term::Coh(ctx, Box::new(ty))),
+        )
+        .or(ident().map(|x| Term::Var(x)))
+        .or(just("‼")
+            .ignore_then(term.padded().delimited_by(just("("), just(")")))
+            .map(|t| Term::Susp(Box::new(t))))
 }
 
 fn args<P>(term: P) -> impl Parser<char, Args, Error = Simple<char>> + Clone
@@ -167,8 +162,7 @@ where
 
 pub fn term() -> impl Parser<char, Term, Error = Simple<char>> + Clone {
     recursive(|term| {
-        head_internal(term.clone())
-            .map(Term::Head)
+        atom(term.clone())
             .padded()
             .then(args_with_type(term.clone()).padded().repeated())
             .foldl(|t, a| Term::App(Box::new(t), a))
@@ -179,29 +173,8 @@ pub fn ty() -> impl Parser<char, Type, Error = Simple<char>> {
     ty_internal(term())
 }
 
-pub fn head() -> impl Parser<char, Head, Error = Simple<char>> {
-    head_internal(term())
-}
-
 pub fn ctx() -> impl Parser<char, Ctx, Error = Simple<char>> {
     ctx_internal(term())
-}
-
-impl Display for Head {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Head::Susp(head) => {
-                write!(f, "‼ {}", head)?;
-            }
-            Head::Var(x) => {
-                x.fmt(f)?;
-            }
-            Head::Coh(ctx, ty) => {
-                write!(f, "coh [{} : {}]", ctx, ty)?;
-            }
-        }
-        Ok(())
-    }
 }
 
 impl Display for ArgsWithType {
@@ -217,12 +190,18 @@ impl Display for ArgsWithType {
 impl Display for Term {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Term::Head(h) => {
-                h.fmt(f)?;
-            }
             Term::App(t, a) => {
                 t.fmt(f)?;
                 a.fmt(f)?;
+            }
+            Term::Susp(head) => {
+                write!(f, "‼({head})")?;
+            }
+            Term::Var(x) => {
+                x.fmt(f)?;
+            }
+            Term::Coh(ctx, ty) => {
+                write!(f, "coh [{} : {}]", ctx, ty)?;
             }
         }
         Ok(())
@@ -246,6 +225,10 @@ impl Display for Type {
                 Some(a) => write!(f, "{a} | {s} -> {t}"),
                 None => write!(f, "{s} -> {t}"),
             },
+            Type::App(ty, args) => {
+                write!(f, "({ty}){args}")
+            }
+            Type::Susp(ty) => write!(f, "‼({ty})"),
         }
     }
 }

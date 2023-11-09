@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Deref};
+use std::collections::HashMap;
 
 use thiserror::Error;
 
@@ -6,7 +6,7 @@ use crate::{
     common::{Name, NoDispOption, Pos, Tree},
     eval::SemCtx,
     normal::{TermN, TypeN},
-    syntax::{Args, Ctx, Head, Label, Sub, Term, Type},
+    syntax::{Args, Ctx, Label, Sub, Term, Type},
     term::{ArgsT, ArgsWithTypeT, CtxT, LabelT, TermT, TypeT},
 };
 
@@ -59,47 +59,18 @@ pub enum TypeCheckError {
     LocMaxMissing,
     #[error("Empty substitution")]
     EmptySub,
-    #[error("Cannot infer context for application")]
-    CannotInferCtx,
-    #[error("Missing args for head term {0}")]
-    MissingArgs(Head),
+    #[error("Cannot infer context for {0}")]
+    CannotInferCtx(Term),
+    #[error("Checking inferable term {0} is unsupported")]
+    CannotCheck(Term),
+    #[error("Type checking {0} is unsupported")]
+    UnsupportedCheck(Type),
 }
 
 impl Term {
-    pub fn infer(
-        &self,
-        env: &Environment,
-        local: &HashMap<Name, (Pos, TypeT)>,
-    ) -> Result<(TermT, TypeT), TypeCheckError> {
-        match &self {
-            Term::Head(Head::Var(x)) => local
-                .get(x)
-                .map(|(p, ty)| (TermT::Var(p.clone()), ty.clone()))
-                .ok_or(TypeCheckError::UnknownVariable(x.clone())),
-            Term::Head(h) => Err(TypeCheckError::MissingArgs(h.clone())),
-            Term::App(tm, args) => match tm.deref() {
-                Term::Head(head) => {
-                    let (ctx, tm, ty) = head.infer(&env)?;
-                    let awt = args.args.infer(env, local, &ctx)?;
-                    if let Some(t) = &args.ty {
-                        t.check(env, local, &awt.ty.eval(&SemCtx::id(), env))?;
-                    }
-
-                    Ok((
-                        TermT::App(Box::new(tm), awt.clone()),
-                        TypeT::App(Box::new(ty), awt),
-                    ))
-                }
-                Term::App(_, _) => Err(TypeCheckError::CannotInferCtx),
-            },
-        }
-    }
-}
-
-impl Head {
     pub fn infer(&self, env: &Environment) -> Result<(CtxT, TermT, TypeT), TypeCheckError> {
-        match &self {
-            Head::Susp(t) => {
+        match self {
+            Term::Susp(t) => {
                 let (ctx, tm, ty) = t.infer(env)?;
                 Ok((
                     ctx.susp(),
@@ -107,13 +78,13 @@ impl Head {
                     TypeT::Susp(Box::new(ty)),
                 ))
             }
-            Head::Var(x) => env
+            Term::Var(x) => env
                 .top_level
                 .get(x)
                 .cloned()
                 .map(|(ctx, _, ty)| (ctx, TermT::TopLvl(x.clone()), ty))
                 .ok_or(TypeCheckError::UnknownTopLevel(x.clone())),
-            Head::Coh(tr, ty) => {
+            Term::Coh(tr, ty) => {
                 let tyt = ty.infer(&env, &tr.to_map())?;
                 // TODO: Support check
 
@@ -123,6 +94,33 @@ impl Head {
                     tyt,
                 ))
             }
+            t => Err(TypeCheckError::CannotInferCtx(t.clone())),
+        }
+    }
+
+    pub fn check(
+        &self,
+        env: &Environment,
+        local: &HashMap<Name, (Pos, TypeT)>,
+    ) -> Result<(TermT, TypeT), TypeCheckError> {
+        match self {
+            Term::Var(x) => local
+                .get(x)
+                .map(|(p, ty)| (TermT::Var(p.clone()), ty.clone()))
+                .ok_or(TypeCheckError::UnknownVariable(x.clone())),
+            Term::App(head, args) => {
+                let (ctx, tm, ty) = head.infer(&env)?;
+                let awt = args.args.infer(env, local, &ctx)?;
+                if let Some(t) = &args.ty {
+                    t.check(env, local, &awt.ty.eval(&SemCtx::id(), env))?;
+                }
+
+                Ok((
+                    TermT::App(Box::new(tm), awt.clone()),
+                    TypeT::App(Box::new(ty), awt),
+                ))
+            }
+            t => Err(TypeCheckError::CannotCheck(t.clone())),
         }
     }
 }
@@ -136,8 +134,8 @@ impl Type {
         match self {
             Type::Base => Ok(TypeT::Base),
             Type::Arr(s, a, t) => {
-                let (st, ty1) = s.infer(env, local)?;
-                let (tt, ty2) = t.infer(env, local)?;
+                let (st, ty1) = s.check(env, local)?;
+                let (tt, ty2) = t.check(env, local)?;
                 let sem_ctx = SemCtx::id();
                 let ty1n = ty1.eval(&sem_ctx, env);
                 let ty2n = ty2.eval(&sem_ctx, env);
@@ -149,6 +147,7 @@ impl Type {
                 }
                 Ok(TypeT::Arr(st, Box::new(ty1n.quote()), tt))
             }
+            ty => Err(TypeCheckError::UnsupportedCheck(ty.clone())),
         }
     }
 
@@ -165,12 +164,12 @@ impl Type {
                 Type::Base => return Err(TypeCheckError::DimensionMismatch),
                 Type::Arr(s1, a, t1) => {
                     let sem_ctx = SemCtx::id();
-                    let (s1t, _) = s1.infer(env, local)?;
+                    let (s1t, _) = s1.check(env, local)?;
                     let s1n = s1t.eval(&sem_ctx, env);
                     if &s1n != s2 {
                         return Err(TypeCheckError::TermMismatch(s1n, s2.clone()));
                     }
-                    let (t1t, _) = t1.infer(env, local)?;
+                    let (t1t, _) = t1.check(env, local)?;
                     let t1n = t1t.eval(&sem_ctx, env);
                     if &t1n != t2 {
                         return Err(TypeCheckError::TermMismatch(t1n, t2.clone()));
@@ -182,6 +181,7 @@ impl Type {
                         break;
                     }
                 }
+                ty => return Err(TypeCheckError::UnsupportedCheck(ty.clone())),
             }
         }
         if to_check != &Type::Base {
@@ -212,7 +212,7 @@ impl Label {
                 .0
                 .as_ref()
                 .ok_or(TypeCheckError::LocMaxMissing)?
-                .infer(env, local)?;
+                .check(env, local)?;
             return Ok((Tree::singleton(tm), ty.eval(&SemCtx::id(), env)));
         }
 
@@ -241,7 +241,7 @@ impl Label {
             .zip(el_norm)
             .map(|(el, eln)| match &el.0 {
                 Some(tm) => {
-                    let tmt = tm.infer(env, local)?.0;
+                    let tmt = tm.check(env, local)?.0;
                     let tmn = tmt.eval(&SemCtx::id(), env);
                     if tmn != eln {
                         Err(TypeCheckError::TermMismatch(tmn, eln))
@@ -268,7 +268,7 @@ impl Args {
             (CtxT::Ctx(ctx), Args::Sub(sub)) => {
                 let (args, tys): (Vec<TermT>, Vec<TypeT>) = sub
                     .iter()
-                    .map(|t| t.infer(env, local))
+                    .map(|t| t.check(env, local))
                     .collect::<Result<Vec<_>, _>>()?
                     .into_iter()
                     .unzip();

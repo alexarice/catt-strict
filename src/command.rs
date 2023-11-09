@@ -3,12 +3,12 @@ use chumsky::{prelude::Simple, primitive::just, text::TextParser, Parser};
 use crate::{
     common::Name,
     eval::SemCtx,
-    syntax::{ctx, head, ident, term, ty, Ctx, Head, Term, Type},
+    syntax::{ctx, ident, term, ty, Ctx, Term, Type},
     typecheck::{Environment, TypeCheckError},
 };
 
 pub enum Command {
-    LetHead(Name, Head),
+    LetHead(Name, Term),
     LetCtx(Name, Ctx, Term),
     LetWT(Name, Ctx, Type, Term),
 }
@@ -30,7 +30,7 @@ pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
             }
         })
         .then_with(|(id, ctx, ty)| match (ctx, ty) {
-            (None, None) => head().map(move |h| Command::LetHead(id.clone(), h)).boxed(),
+            (None, None) => term().map(move |h| Command::LetHead(id.clone(), h)).boxed(),
             (None, Some(_)) => unreachable!(),
             (Some(ctx), None) => just("")
                 .to(ctx)
@@ -56,14 +56,14 @@ impl Command {
             Command::LetCtx(nm, ctx, tm) => {
                 println!("Checking {nm}");
                 let (ctxt, local) = ctx.check(env)?;
-                let (tmt, tyt) = tm.infer(env, &local)?;
+                let (tmt, tyt) = tm.check(env, &local)?;
                 println!("{:#?}", tmt.eval(&SemCtx::id(), env));
                 env.top_level.insert(nm, (ctxt, tmt, tyt));
             }
             Command::LetWT(nm, ctx, ty, tm) => {
                 println!("Checking {nm}");
                 let (ctxt, local) = ctx.check(env)?;
-                let (tmt, tyt) = tm.infer(env, &local)?;
+                let (tmt, tyt) = tm.check(env, &local)?;
                 ty.check(env, &local, &tyt.eval(&SemCtx::id(), env))?;
                 env.top_level.insert(nm, (ctxt, tmt, tyt));
             }
