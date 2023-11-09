@@ -13,7 +13,7 @@ impl Display for Name {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Derivative)]
+#[derive(Clone, Debug, Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct NoDispOption<T>(pub Option<T>);
 
@@ -25,6 +25,14 @@ impl<T: Display> Display for NoDispOption<T> {
         }
     }
 }
+
+impl<T> PartialEq for NoDispOption<T> {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl<T> Eq for NoDispOption<T> {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Tree<T> {
