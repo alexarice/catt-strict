@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Deref};
 
 use thiserror::Error;
 
@@ -61,6 +61,8 @@ pub enum TypeCheckError {
     EmptySub,
     #[error("Cannot infer context for application")]
     CannotInferCtx,
+    #[error("Missing args for head term {0}")]
+    MissingArgs(Head),
 }
 
 impl Term {
@@ -70,23 +72,26 @@ impl Term {
         local: &HashMap<Name, (Pos, TypeT)>,
     ) -> Result<(TermT, TypeT), TypeCheckError> {
         match &self {
-            Term::Var(x) => local
+            Term::Head(Head::Var(x)) => local
                 .get(x)
                 .map(|(p, ty)| (TermT::Var(p.clone()), ty.clone()))
                 .ok_or(TypeCheckError::UnknownVariable(x.clone())),
-            Term::WithArgs(head, args) => {
-                let (ctx, tm, ty) = head.infer(&env)?;
-                let awt = args.args.infer(env, local, &ctx)?;
-                if let Some(t) = &args.ty {
-                    t.check(env, local, &awt.ty.eval(&SemCtx::id(), env))?;
-                }
+            Term::Head(h) => Err(TypeCheckError::MissingArgs(h.clone())),
+            Term::App(tm, args) => match tm.deref() {
+                Term::Head(head) => {
+                    let (ctx, tm, ty) = head.infer(&env)?;
+                    let awt = args.args.infer(env, local, &ctx)?;
+                    if let Some(t) = &args.ty {
+                        t.check(env, local, &awt.ty.eval(&SemCtx::id(), env))?;
+                    }
 
-                Ok((
-                    TermT::App(Box::new(tm), awt.clone()),
-                    TypeT::App(Box::new(ty), awt),
-                ))
-            }
-            Term::App(_, _) => Err(TypeCheckError::CannotInferCtx),
+                    Ok((
+                        TermT::App(Box::new(tm), awt.clone()),
+                        TypeT::App(Box::new(ty), awt),
+                    ))
+                }
+                Term::App(_, _) => Err(TypeCheckError::CannotInferCtx),
+            },
         }
     }
 }
@@ -102,7 +107,7 @@ impl Head {
                     TypeT::Susp(Box::new(ty)),
                 ))
             }
-            Head::TopLvl(x) => env
+            Head::Var(x) => env
                 .top_level
                 .get(x)
                 .cloned()

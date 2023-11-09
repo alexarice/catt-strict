@@ -6,7 +6,7 @@ use std::fmt::Display;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Head {
     Susp(Box<Head>),
-    TopLvl(Name),
+    Var(Name),
     Coh(Tree<NoDispOption<Name>>, Box<Type>),
 }
 
@@ -18,8 +18,7 @@ pub struct ArgsWithType {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Term {
-    Var(Name),
-    WithArgs(Head, ArgsWithType),
+    Head(Head),
     App(Box<Term>, ArgsWithType),
 }
 
@@ -91,7 +90,7 @@ where
                     .padded()
                     .map(|(ctx, ty)| Head::Coh(ctx, Box::new(ty))),
             )
-            .or(ident().map(|x| Head::TopLvl(x)))
+            .or(ident().map(|x| Head::Var(x)))
             .or(just("‼")
                 .ignore_then(head.padded())
                 .map(|t| Head::Susp(Box::new(t))))
@@ -169,14 +168,10 @@ where
 pub fn term() -> impl Parser<char, Term, Error = Simple<char>> + Clone {
     recursive(|term| {
         head_internal(term.clone())
+            .map(Term::Head)
             .padded()
-            .then(args_with_type(term.clone()).padded().repeated().at_least(1))
-            .map(|(head, mut args)| {
-                let fst_arg = args.remove(0);
-                (Term::WithArgs(head, fst_arg), args)
-            })
+            .then(args_with_type(term.clone()).padded().repeated())
             .foldl(|t, a| Term::App(Box::new(t), a))
-            .or(ident().map(|x| Term::Var(x)))
     })
 }
 
@@ -198,7 +193,7 @@ impl Display for Head {
             Head::Susp(head) => {
                 write!(f, "‼ {}", head)?;
             }
-            Head::TopLvl(x) => {
+            Head::Var(x) => {
                 x.fmt(f)?;
             }
             Head::Coh(ctx, ty) => {
@@ -222,16 +217,12 @@ impl Display for ArgsWithType {
 impl Display for Term {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Term::Head(h) => {
+                h.fmt(f)?;
+            }
             Term::App(t, a) => {
                 t.fmt(f)?;
                 a.fmt(f)?;
-            }
-            Term::Var(name) => {
-                name.0.fmt(f)?;
-            }
-            Term::WithArgs(head, args) => {
-                head.fmt(f)?;
-                args.fmt(f)?;
             }
         }
         Ok(())
