@@ -59,6 +59,8 @@ pub enum TypeCheckError {
     LocMaxMissing,
     #[error("Empty substitution")]
     EmptySub,
+    #[error("Cannot infer context for application")]
+    CannotInferCtx,
 }
 
 impl Term {
@@ -72,10 +74,10 @@ impl Term {
                 .get(x)
                 .map(|(p, ty)| (TermT::Var(p.clone()), ty.clone()))
                 .ok_or(TypeCheckError::UnknownVariable(x.clone())),
-            Term::WithArgs(head, args, aty) => {
+            Term::WithArgs(head, args) => {
                 let (ctx, tm, ty) = head.infer(&env)?;
-                let awt = args.infer(env, local, &ctx)?;
-                if let Some(t) = aty {
+                let awt = args.args.infer(env, local, &ctx)?;
+                if let Some(t) = &args.ty {
                     t.check(env, local, &awt.ty.eval(&SemCtx::id(), env))?;
                 }
 
@@ -84,6 +86,7 @@ impl Term {
                     TypeT::App(Box::new(ty), awt),
                 ))
             }
+            Term::App(_, _) => Err(TypeCheckError::CannotInferCtx),
         }
     }
 }

@@ -11,9 +11,16 @@ pub enum Head {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ArgsWithType {
+    pub args: Args,
+    pub ty: Option<Box<Type>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Term {
     Var(Name),
-    WithArgs(Head, Args, Option<Box<Type>>),
+    WithArgs(Head, ArgsWithType),
+    App(Box<Term>, ArgsWithType),
 }
 
 pub type Sub = Vec<Term>;
@@ -104,6 +111,21 @@ where
         .or(tree(term.or_not().map(NoDispOption).padded()).map(Args::Label))
 }
 
+fn args_with_type<P>(term: P) -> impl Parser<char, ArgsWithType, Error = Simple<char>> + Clone
+where
+    P: Parser<char, Term, Error = Simple<char>> + Clone + 'static,
+{
+    args(term.clone())
+        .then(
+            ty_internal(term)
+                .map(|ty| Box::new(ty))
+                .padded()
+                .delimited_by(just("<"), just(">"))
+                .or_not(),
+        )
+        .map(|(args, ty)| ArgsWithType { args, ty })
+}
+
 fn ty_internal<P>(term: P) -> impl Parser<char, Type, Error = Simple<char>> + Clone
 where
     P: Parser<char, Term, Error = Simple<char>> + Clone,
@@ -148,17 +170,12 @@ pub fn term() -> impl Parser<char, Term, Error = Simple<char>> + Clone {
     recursive(|term| {
         head_internal(term.clone())
             .padded()
-            .then(
-                args(term.clone())
-                    .then(
-                        ty_internal(term)
-                            .padded()
-                            .delimited_by(just("<"), just(">"))
-                            .or_not(),
-                    )
-                    .padded(),
-            )
-            .map(|(head, (a, ty))| Term::WithArgs(head, a, ty.map(Box::new)))
+            .then(args_with_type(term.clone()).padded().repeated().at_least(1))
+            .map(|(head, mut args)| {
+                let fst_arg = args.remove(0);
+                (Term::WithArgs(head, fst_arg), args)
+            })
+            .foldl(|t, a| Term::App(Box::new(t), a))
             .or(ident().map(|x| Term::Var(x)))
     })
 }
@@ -192,18 +209,29 @@ impl Display for Head {
     }
 }
 
+impl Display for ArgsWithType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.args.fmt(f)?;
+        if let Some(typ) = &self.ty {
+            write!(f, "<{}>", typ)?;
+        }
+        Ok(())
+    }
+}
+
 impl Display for Term {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Term::WithArgs(t, a, ty) => {
+            Term::App(t, a) => {
                 t.fmt(f)?;
                 a.fmt(f)?;
-                if let Some(typ) = ty {
-                    write!(f, "<{}>", typ)?;
-                }
             }
             Term::Var(name) => {
                 name.0.fmt(f)?;
+            }
+            Term::WithArgs(head, args) => {
+                head.fmt(f)?;
+                args.fmt(f)?;
             }
         }
         Ok(())
