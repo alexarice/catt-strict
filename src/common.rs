@@ -144,7 +144,7 @@ impl<T> Tree<T> {
     }
 
     pub fn path_tree(&self) -> Tree<Path> {
-        let elements = (0..self.elements.len()).map(|i| Path::here(i)).collect();
+        let elements = (0..self.elements.len()).map(Path::here).collect();
         let branches = self
             .branches
             .iter()

@@ -86,7 +86,7 @@ where
                 .padded()
                 .map(|(ctx, ty)| Term::Coh(ctx, Box::new(ty))),
         )
-        .or(ident().map(|x| Term::Var(x)))
+        .or(ident().map(Term::Var))
         .or(just("‼")
             .ignore_then(term.padded().delimited_by(just("("), just(")")))
             .map(|t| Term::Susp(Box::new(t))))
@@ -112,7 +112,7 @@ where
     args(term.clone())
         .then(
             ty_internal(term)
-                .map(|ty| Box::new(ty))
+                .map(Box::new)
                 .padded()
                 .delimited_by(just("<"), just(">"))
                 .or_not(),

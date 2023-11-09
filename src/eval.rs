@@ -24,7 +24,7 @@ impl SemCtx {
 
     pub fn get(&self, pos: &Pos) -> TermN {
         self.map
-            .get(&pos)
+            .get(pos)
             .cloned()
             .unwrap_or(TermN::Variable(pos.clone()))
     }
@@ -90,53 +90,48 @@ impl TermT {
                     tree = tree.branches.remove(0);
                 }
 
-                if env.reduction.disc_rem {
-                    if tree.is_disc()
-                        && tree.dim() == 1
-                        && final_ty
-                            == TypeN(vec![(
-                                TermN::Variable(Pos::Path(Path::here(0))),
-                                TermN::Variable(Pos::Path(Path::here(1))),
-                            )])
-                    {
-                        return ctx.get(&Pos::Path(tr.get_maximal_paths().remove(0)));
-                    }
+                if env.reduction.disc_rem
+                    && tree.is_disc()
+                    && tree.dim() == 1
+                    && final_ty
+                        == TypeN(vec![(
+                            TermN::Variable(Pos::Path(Path::here(0))),
+                            TermN::Variable(Pos::Path(Path::here(1))),
+                        )])
+                {
+                    return ctx.get(&Pos::Path(tr.get_maximal_paths().remove(0)));
                 }
 
-                if env.reduction.endo_coh {
-                    if final_ty.0.last().is_some_and(|(s, t)| s == t) {
-                        if tree.dim() != 0
-                            || final_ty
-                                != TypeN(vec![(
-                                    TermN::Variable(Pos::Path(Path::here(0))),
-                                    TermN::Variable(Pos::Path(Path::here(0))),
-                                )])
-                        {
-                            // Not already an identity
+                if env.reduction.endo_coh
+                    && final_ty.0.last().is_some_and(|(s, t)| s == t)
+                    && (tree.dim() != 0
+                        || final_ty
+                            != TypeN(vec![(
+                                TermN::Variable(Pos::Path(Path::here(0))),
+                                TermN::Variable(Pos::Path(Path::here(0))),
+                            )]))
+                {
+                    match final_ty.quote() {
+                        TypeT::Arr(s, a, _) => {
+                            let new_args_with_ty = ArgsWithTypeT {
+                                args: ArgsT::Label(Tree::singleton(s)),
+                                ty: a,
+                            };
+                            let tmt = TermT::App(
+                                Box::new(TermT::Coh(
+                                    Tree::singleton(NoDispOption(None)),
+                                    Box::new(TypeT::Arr(
+                                        TermT::Var(Pos::Path(Path::here(0))),
+                                        Box::new(TypeT::Base),
+                                        TermT::Var(Pos::Path(Path::here(0))),
+                                    )),
+                                )),
+                                new_args_with_ty,
+                            );
 
-                            match final_ty.quote() {
-                                TypeT::Arr(s, a, _) => {
-                                    let new_args_with_ty = ArgsWithTypeT {
-                                        args: ArgsT::Label(Tree::singleton(s)),
-                                        ty: a,
-                                    };
-                                    let tmt = TermT::App(
-                                        Box::new(TermT::Coh(
-                                            Tree::singleton(NoDispOption(None)),
-                                            Box::new(TypeT::Arr(
-                                                TermT::Var(Pos::Path(Path::here(0))),
-                                                Box::new(TypeT::Base),
-                                                TermT::Var(Pos::Path(Path::here(0))),
-                                            )),
-                                        )),
-                                        new_args_with_ty,
-                                    );
-
-                                    return tmt.eval(ctx, env);
-                                }
-                                _ => unreachable!(),
-                            }
+                            return tmt.eval(ctx, env);
                         }
+                        _ => unreachable!(),
                     }
                 }
 
@@ -205,15 +200,12 @@ impl ArgsT {
 
 impl HeadN {
     pub fn quote(&self) -> TermT {
-        match self {
-            HeadN { tree, ty, susp } => {
-                let mut x = TermT::Coh(tree.clone(), Box::new(ty.quote()));
-                for _ in 0..*susp {
-                    x = TermT::Susp(Box::new(x));
-                }
-                x
-            }
+        let HeadN { tree, ty, susp } = self;
+        let mut x = TermT::Coh(tree.clone(), Box::new(ty.quote()));
+        for _ in 0..*susp {
+            x = TermT::Susp(Box::new(x));
         }
+        x
     }
 }
 

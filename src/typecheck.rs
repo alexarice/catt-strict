@@ -10,8 +10,10 @@ use crate::{
     term::{ArgsT, ArgsWithTypeT, CtxT, LabelT, TermT, TypeT},
 };
 
+type Local = HashMap<Name, (Pos, TypeT)>;
+
 impl Tree<NoDispOption<Name>> {
-    pub fn to_map(&self) -> HashMap<Name, (Pos, TypeT)> {
+    pub fn to_map(&self) -> Local {
         let pairs = self.get_paths();
         pairs
             .into_iter()
@@ -85,7 +87,7 @@ impl Term {
                 .map(|(ctx, _, ty)| (ctx, TermT::TopLvl(x.clone()), ty))
                 .ok_or(TypeCheckError::UnknownTopLevel(x.clone())),
             Term::Coh(tr, ty) => {
-                let tyt = ty.infer(&env, &tr.to_map())?;
+                let tyt = ty.infer(env, &tr.to_map())?;
                 // TODO: Support check
 
                 Ok((
@@ -101,7 +103,7 @@ impl Term {
     pub fn check(
         &self,
         env: &Environment,
-        local: &HashMap<Name, (Pos, TypeT)>,
+        local: &Local,
     ) -> Result<(TermT, TypeT), TypeCheckError> {
         match self {
             Term::Var(x) => local
@@ -109,7 +111,7 @@ impl Term {
                 .map(|(p, ty)| (TermT::Var(p.clone()), ty.clone()))
                 .ok_or(TypeCheckError::UnknownVariable(x.clone())),
             Term::App(head, args) => {
-                let (ctx, tm, ty) = head.infer(&env)?;
+                let (ctx, tm, ty) = head.infer(env)?;
                 let awt = args.args.infer(env, local, &ctx)?;
                 if let Some(t) = &args.ty {
                     t.check(env, local, &awt.ty.eval(&SemCtx::id(), env))?;
@@ -126,11 +128,7 @@ impl Term {
 }
 
 impl Type {
-    pub fn infer(
-        &self,
-        env: &Environment,
-        local: &HashMap<Name, (Pos, TypeT)>,
-    ) -> Result<TypeT, TypeCheckError> {
+    pub fn infer(&self, env: &Environment, local: &Local) -> Result<TypeT, TypeCheckError> {
         match self {
             Type::Base => Ok(TypeT::Base),
             Type::Arr(s, a, t) => {
@@ -154,7 +152,7 @@ impl Type {
     pub fn check(
         &self,
         env: &Environment,
-        local: &HashMap<Name, (Pos, TypeT)>,
+        local: &Local,
         ty: &TypeN,
     ) -> Result<(), TypeCheckError> {
         let mut to_check = self;
@@ -175,7 +173,7 @@ impl Type {
                         return Err(TypeCheckError::TermMismatch(t1n, t2.clone()));
                     }
                     if let Some(ty) = a {
-                        to_check = &*ty;
+                        to_check = &**ty;
                     } else {
                         to_check = &Type::Base;
                         break;
@@ -202,7 +200,7 @@ impl Label {
     pub fn infer(
         &self,
         env: &Environment,
-        local: &HashMap<Name, (Pos, TypeT)>,
+        local: &Local,
     ) -> Result<(LabelT, TypeN), TypeCheckError> {
         if self.branches.is_empty() {
             let (tm, ty) = self
@@ -260,7 +258,7 @@ impl Args {
     pub fn infer(
         &self,
         env: &Environment,
-        local: &HashMap<Name, (Pos, TypeT)>,
+        local: &Local,
         ctx: &CtxT,
     ) -> Result<ArgsWithTypeT, TypeCheckError> {
         match (ctx, self) {
@@ -306,21 +304,16 @@ impl Args {
 }
 
 impl Ctx {
-    pub fn check(
-        &self,
-        env: &Environment,
-    ) -> Result<(CtxT, HashMap<Name, (Pos, TypeT)>), TypeCheckError> {
+    pub fn check(&self, env: &Environment) -> Result<(CtxT, Local), TypeCheckError> {
         match self {
             Ctx::Tree(tr) => Ok((CtxT::Tree(tr.clone()), tr.to_map())),
             Ctx::Other(ctx) => {
-                let mut level = 0;
                 let mut ctxt = vec![];
                 let mut local = HashMap::new();
-                for (name, ty) in ctx {
-                    let tyt = ty.infer(&env, &local)?;
+                for (level, (name, ty)) in ctx.iter().enumerate() {
+                    let tyt = ty.infer(env, &local)?;
                     ctxt.push((Some(name.clone()), tyt.clone()));
                     local.insert(name.clone(), (Pos::Level(level), tyt));
-                    level += 1;
                 }
 
                 Ok((CtxT::Ctx(ctxt), local))

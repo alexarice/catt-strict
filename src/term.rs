@@ -47,8 +47,8 @@ pub enum CtxT {
 impl CtxT {
     pub fn get_name(&self, p: &Pos) -> Option<Name> {
         match (self, p) {
-            (CtxT::Tree(tr), Pos::Path(x)) => tr.lookup(x).map(|x| x.0.clone()).flatten(),
-            (CtxT::Ctx(ctx), Pos::Level(l)) => ctx.get(*l).map(|x| x.0.clone()).flatten(),
+            (CtxT::Tree(tr), Pos::Path(x)) => tr.lookup(x).and_then(|x| x.0.clone()),
+            (CtxT::Ctx(ctx), Pos::Level(l)) => ctx.get(*l).and_then(|x| x.0.clone()),
             _ => None,
         }
     }
