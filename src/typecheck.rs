@@ -27,9 +27,15 @@ impl Tree<NoDispOption<Name>> {
     }
 }
 
+pub enum Insertion {
+    Pruning,
+    Full,
+}
+
 pub struct Reduction {
     pub disc_rem: bool,
     pub endo_coh: bool,
+    pub insertion: Option<Insertion>,
 }
 
 pub enum Support {

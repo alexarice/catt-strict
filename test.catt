@@ -15,3 +15,5 @@ let comp = coh[(x(f)y(g)z): x -> z]
 let endo = coh[(x(f)y(g)z): comp(f,g) -> comp(f,g)]
 
 normalise (a: *) (b: a -> a) | endo(b,b)
+
+normalise (a: *) (b: a -> a) | comp(id(a),b)

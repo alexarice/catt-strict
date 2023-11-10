@@ -1,3 +1,5 @@
+use std::ops::RangeInclusive;
+
 use derivative::Derivative;
 
 use crate::{
@@ -13,6 +15,7 @@ pub enum TermT {
     TopLvl(Name),
     Susp(Box<TermT>),
     Coh(Tree<NoDispOption<Name>>, Box<TypeT>),
+    Include(Box<TermT>, RangeInclusive<usize>),
 }
 
 pub type SubT = Vec<TermT>;
@@ -71,6 +74,9 @@ impl TermT {
                 tr.clone(),
                 Box::new(ty.to_expr(Some(&CtxT::Tree(tr.clone())), with_ict)),
             ),
+            TermT::Include(tm, rng) => {
+                Term::Include(Box::new(tm.to_expr(ctx, with_ict)), rng.clone())
+            }
         }
     }
 }

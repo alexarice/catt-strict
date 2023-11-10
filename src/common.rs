@@ -1,11 +1,18 @@
 use std::fmt::Display;
 
 use derivative::Derivative;
+use itertools::Itertools;
 
 use crate::term::{TermT, TypeT};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Name(pub String);
+
+impl<'a> From<&'a str> for Name {
+    fn from(value: &'a str) -> Self {
+        Name(value.to_string())
+    }
+}
 
 impl Display for Name {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -81,6 +88,28 @@ impl<T> Tree<T> {
                 .iter()
                 .enumerate()
                 .flat_map(|(i, br)| br.get_maximal_paths().into_iter().map(move |p| p.extend(i)))
+                .collect()
+        }
+    }
+
+    pub fn get_maximal_with_branching(&self) -> Vec<(Path, usize, &T)> {
+        if self.branches.is_empty() {
+            vec![(Path::here(0), 0, &self.elements[0])]
+        } else {
+            self.branches
+                .iter()
+                .enumerate()
+                .flat_map(|(i, br)| {
+                    let v = br.get_maximal_with_branching();
+                    let linear = v.len() == 1;
+                    v.into_iter().map(move |(p, bh, el)| {
+                        if linear {
+                            (Path::here(i), 0, el)
+                        } else {
+                            (p.extend(i), bh + 1, el)
+                        }
+                    })
+                })
                 .collect()
         }
     }
@@ -172,6 +201,29 @@ impl<T> Tree<T> {
         }
         tr.elements.get(p.here)
     }
+
+    pub fn insertion(&mut self, mut bp: Path, inner: Tree<T>) {
+        match bp.path.pop() {
+            Some(i) => {
+                let (s, t) = inner.elements.into_iter().collect_tuple().unwrap();
+                self.elements[i] = s;
+                self.elements[i + 1] = t;
+                self.branches[i].insertion(bp, inner.branches.into_iter().next().unwrap());
+            }
+            None => {
+                self.elements.splice(bp.here..bp.here + 2, inner.elements);
+                self.branches.splice(bp.here..bp.here + 1, inner.branches);
+            }
+        }
+    }
+
+    pub fn unwrap_disc(self) -> T {
+        if self.branches.is_empty() {
+            self.elements.into_iter().next().unwrap()
+        } else {
+            self.branches.into_iter().next().unwrap().unwrap_disc()
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -181,9 +233,8 @@ pub struct Path {
 }
 
 impl Path {
-    pub fn susp(mut self, n: usize) -> Self {
-        self.path.extend((0..).take(n));
-        self
+    pub fn susp(self) -> Self {
+        self.extend(0)
     }
 
     pub fn de_susp(mut self, d: usize) -> Self {
@@ -231,6 +282,10 @@ impl Path {
         }
         ty
     }
+
+    pub fn fst_mut(&mut self) -> &mut usize {
+        self.path.last_mut().unwrap_or(&mut self.here)
+    }
 }
 
 impl Display for Path {
@@ -250,10 +305,10 @@ pub enum Pos {
 }
 
 impl Pos {
-    pub fn susp(self, n: usize) -> Self {
+    pub fn susp(self) -> Self {
         match self {
-            Pos::Level(l) => Pos::Level(l + 2 * n),
-            Pos::Path(p) => Pos::Path(p.susp(n)),
+            Pos::Level(l) => Pos::Level(l + 2),
+            Pos::Path(p) => Pos::Path(p.susp()),
         }
     }
 

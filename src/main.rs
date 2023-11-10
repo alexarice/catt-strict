@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ariadne::{Color, Label, Report, ReportKind, Source};
 use catt_strict::{
     command::command,
-    typecheck::{Environment, Reduction, Support},
+    typecheck::{Environment, Insertion, Reduction, Support},
 };
 use chumsky::prelude::*;
 
@@ -23,6 +23,7 @@ fn main() {
                 reduction: Reduction {
                     disc_rem: true,
                     endo_coh: true,
+                    insertion: Some(Insertion::Full),
                 },
                 support: Support::FullInverse,
             };

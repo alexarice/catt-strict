@@ -1,4 +1,4 @@
-use crate::common::{Name, NoDispOption, Pos, Tree};
+use crate::common::{Name, NoDispOption, Path, Pos, Tree};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HeadN {
@@ -57,6 +57,24 @@ impl TermN {
             }
         }
     }
+
+    pub fn susp(self) -> TermN {
+        match self {
+            TermN::Variable(p) => TermN::Variable(p.susp()),
+            TermN::Other(mut head, args) => {
+                head.susp += 1;
+                TermN::Other(head, args.susp_args())
+            }
+        }
+    }
+
+    pub fn to_args(self, ty: TypeN) -> Tree<TermN> {
+        ty.0.into_iter()
+            .rfold(Tree::singleton(self), |tr, (s, t)| Tree {
+                elements: vec![s, t],
+                branches: vec![tr],
+            })
+    }
 }
 
 impl TypeN {
@@ -91,5 +109,26 @@ impl TypeN {
         let ty = if d == 0 { self } else { self.de_susp_int(d) };
 
         (ty, d)
+    }
+
+    pub fn susp(self) -> TypeN {
+        let mut base = vec![(
+            TermN::Variable(Pos::Path(Path::here(0))),
+            TermN::Variable(Pos::Path(Path::here(1))),
+        )];
+        base.extend(self.0.into_iter().map(|(s, t)| (s.susp(), t.susp())));
+        TypeN(base)
+    }
+}
+
+impl Tree<TermN> {
+    fn susp_args(self) -> Self {
+        Tree {
+            elements: vec![
+                TermN::Variable(Pos::Path(Path::here(0))),
+                TermN::Variable(Pos::Path(Path::here(1))),
+            ],
+            branches: vec![self.map(&|tm| tm.susp())],
+        }
     }
 }

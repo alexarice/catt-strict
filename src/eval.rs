@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::RangeInclusive};
 
 use crate::{
-    common::{NoDispOption, Path, Pos, Tree},
+    common::{Name, NoDispOption, Path, Pos, Tree},
     normal::{HeadN, TermN, TypeN},
-    term::{ArgsT, ArgsWithTypeT, TermT, TypeT},
-    typecheck::Environment,
+    term::{ArgsT, ArgsWithTypeT, LabelT, TermT, TypeT},
+    typecheck::{Environment, Insertion},
 };
 
 #[derive(Clone, Debug)]
@@ -54,6 +54,29 @@ impl SemCtx {
 
         SemCtx { ty, map }
     }
+
+    pub fn include(self, rng: &RangeInclusive<usize>) -> Self {
+        let map = self
+            .map
+            .into_iter()
+            .filter_map(|(pos, tm)| match pos {
+                Pos::Level(_) => None,
+                Pos::Path(mut p) => {
+                    let i = p.fst_mut();
+
+                    if rng.contains(i) {
+                        *i -= *rng.start();
+                    } else {
+                        return None;
+                    }
+
+                    Some((Pos::Path(p), tm))
+                }
+            })
+            .collect();
+
+        SemCtx { ty: self.ty, map }
+    }
 }
 
 impl Tree<TermN> {
@@ -66,26 +89,85 @@ impl Tree<TermN> {
         }
         self
     }
+
+    #[allow(clippy::type_complexity)]
+    pub fn find_insertion_redex(
+        &self,
+        insertion: &Insertion,
+    ) -> Option<(Path, Tree<NoDispOption<Name>>, TypeN, Tree<TermN>)> {
+        let v = self.get_maximal_with_branching();
+        v.into_iter().find_map(|(p, bh, tm)| match tm {
+            TermN::Variable(_) => None,
+            TermN::Other(head, args) => {
+                if head.susp < bh
+                    || (matches!(insertion, Insertion::Pruning)
+                        && (head.tree.dim() != 0
+                            || head.ty
+                                != TypeN(vec![(
+                                    TermN::Variable(Pos::Path(Path::here(0))),
+                                    TermN::Variable(Pos::Path(Path::here(1))),
+                                )])))
+                {
+                    None
+                } else {
+                    let susp_amount = head.susp - bh;
+                    let mut tree = head.tree.clone();
+                    let mut ty = head.ty.clone();
+                    for _ in 0..susp_amount {
+                        tree = tree.susp();
+                        ty = ty.susp();
+                    }
+
+                    Some((p, tree, ty, args.clone()))
+                }
+            }
+        })
+    }
 }
 
 impl TermT {
     pub fn eval(&self, ctx: &SemCtx, env: &Environment) -> TermN {
-        match &self {
+        match self {
             TermT::App(t, awt) => t.eval(&awt.eval(ctx, env), env),
             TermT::Var(pos) => ctx.get(pos).clone(),
             TermT::TopLvl(name) => env.top_level.get(name).unwrap().1.eval(ctx, env),
             TermT::Susp(t) => t.eval(&ctx.clone().restrict(), env),
+            TermT::Include(t, rng) => t.eval(&ctx.clone().include(rng), env),
             TermT::Coh(tr, ty) => {
                 let sem_ty = ctx.get_ty();
                 let dim = sem_ty.dim();
 
-                let new_ctx = SemCtx::id();
+                let mut tyt = *ty.clone();
 
-                let tyn = ty.eval(&new_ctx, env);
+                let mut args = tr.path_tree().map(&|p| ctx.get(&Pos::Path(p)));
+
+                let mut tree = tr.clone();
+
+                if let Some(insertion) = &env.reduction.insertion {
+                    while let Some((p, tr, ty_inner, args_inner)) =
+                        args.find_insertion_redex(insertion)
+                    {
+                        tyt = TypeT::App(
+                            Box::new(tyt),
+                            ArgsWithTypeT {
+                                args: ArgsT::Label(LabelT::exterior_sub(
+                                    &tree,
+                                    p.clone(),
+                                    &tr,
+                                    ty_inner,
+                                )),
+                                ty: Box::new(TypeT::Base),
+                            },
+                        );
+                        tree.insertion(p.clone(), tr);
+                        args.insertion(p.clone(), args_inner)
+                    }
+                }
+
+                let tyn = tyt.eval(&SemCtx::id(), env);
 
                 let (final_ty, ty_susp) = tyn.de_susp(tr.susp_level());
 
-                let mut tree = tr.clone();
                 for _ in 0..ty_susp {
                     tree = tree.branches.remove(0);
                 }
@@ -99,7 +181,7 @@ impl TermT {
                             TermN::Variable(Pos::Path(Path::here(1))),
                         )])
                 {
-                    return ctx.get(&Pos::Path(tr.get_maximal_paths().remove(0)));
+                    return args.unwrap_disc();
                 }
 
                 if env.reduction.endo_coh
@@ -111,31 +193,31 @@ impl TermT {
                                 TermN::Variable(Pos::Path(Path::here(0))),
                             )]))
                 {
-                    match final_ty.quote() {
-                        TypeT::Arr(s, a, _) => {
-                            let new_args_with_ty = ArgsWithTypeT {
-                                args: ArgsT::Label(Tree::singleton(s)),
-                                ty: a,
-                            };
-                            let tmt = TermT::App(
-                                Box::new(TermT::Coh(
-                                    Tree::singleton(NoDispOption(None)),
-                                    Box::new(TypeT::Arr(
-                                        TermT::Var(Pos::Path(Path::here(0))),
-                                        Box::new(TypeT::Base),
-                                        TermT::Var(Pos::Path(Path::here(0))),
-                                    )),
-                                )),
-                                new_args_with_ty,
-                            );
+                    let susp = final_ty.dim() - 1;
+                    if let TypeT::Arr(s, a, _) = final_ty.quote() {
+                        let sem_ctx = SemCtx::new(
+                            args.get_paths()
+                                .into_iter()
+                                .map(|(p, tm)| (Pos::Path(p), tm.clone()))
+                                .collect(),
+                            TypeN(vec![]),
+                        );
 
-                            return tmt.eval(ctx, env);
-                        }
-                        _ => unreachable!(),
+                        let args = s.eval(&sem_ctx, env).to_args(a.eval(&sem_ctx, env));
+
+                        return TermN::Other(
+                            HeadN {
+                                tree: Tree::singleton(NoDispOption(Some("x".into()))),
+                                ty: TypeN(vec![(
+                                    TermN::Variable(Pos::Path(Path::here(0))),
+                                    TermN::Variable(Pos::Path(Path::here(0))),
+                                )]),
+                                susp,
+                            },
+                            args,
+                        );
                     }
                 }
-
-                let args = tr.path_tree().map(&|p| ctx.get(&Pos::Path(p)));
 
                 TermN::Other(
                     HeadN {
@@ -233,5 +315,53 @@ impl TypeN {
         }
 
         ret
+    }
+}
+
+impl LabelT {
+    pub fn exterior_sub<T>(
+        outer: &Tree<T>,
+        mut bp: Path,
+        inner: &Tree<NoDispOption<Name>>,
+        ty: TypeN,
+    ) -> LabelT {
+        match bp.path.pop() {
+            Some(i) => {
+                let mut l = outer.path_tree().map(&|p| TermT::Var(Pos::Path(p)));
+
+                l.branches[i] =
+                    LabelT::exterior_sub(&outer.branches[i], bp, &inner.branches[i], ty)
+                        .map(&|tm| TermT::Include(Box::new(TermT::Susp(Box::new(tm))), i..=i + 1));
+
+                l
+            }
+            None => {
+                let inner_size = inner.branches.len();
+                let mut l = outer.path_tree().map(&|mut p| {
+                    let i = p.fst_mut();
+                    if *i > bp.here {
+                        *i += inner_size;
+                        *i -= 1;
+                    }
+                    TermT::Var(Pos::Path(p))
+                });
+
+                let inner_args = TermN::Other(
+                    HeadN {
+                        tree: inner.clone(),
+                        ty: ty.clone(),
+                        susp: 0,
+                    },
+                    inner.path_tree().map(&|p| TermN::Variable(Pos::Path(p))),
+                )
+                .to_args(ty)
+                .map(&|tm| tm.quote());
+
+                l.elements.splice(bp.here..bp.here + 2, inner_args.elements);
+                l.branches.splice(bp.here..bp.here + 1, inner_args.branches);
+
+                l
+            }
+        }
     }
 }

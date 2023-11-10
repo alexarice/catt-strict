@@ -1,7 +1,7 @@
 use crate::common::{Name, NoDispOption, Tree};
 use chumsky::{prelude::*, text::keyword};
 use itertools::Itertools;
-use std::fmt::Display;
+use std::{fmt::Display, ops::RangeInclusive};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArgsWithType {
@@ -15,6 +15,7 @@ pub enum Term {
     Susp(Box<Term>),
     Var(Name),
     Coh(Tree<NoDispOption<Name>>, Box<Type>),
+    Include(Box<Term>, RangeInclusive<usize>),
 }
 
 pub type Sub = Vec<Term>;
@@ -203,6 +204,9 @@ impl Display for Term {
             Term::Coh(ctx, ty) => {
                 write!(f, "coh [{} : {}]", ctx, ty)?;
             }
+            Term::Include(tm, rng) => {
+                write!(f, "inc<{}-{}>({tm})", rng.start(), rng.end())?;
+            }
         }
         Ok(())
     }
@@ -228,7 +232,9 @@ impl Display for Type {
             Type::App(ty, args) => {
                 write!(f, "({ty}){args}")
             }
-            Type::Susp(ty) => write!(f, "‼({ty})"),
+            Type::Susp(ty) => {
+                write!(f, "‼({ty})")
+            }
         }
     }
 }
