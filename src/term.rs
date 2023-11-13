@@ -55,6 +55,17 @@ impl CtxT {
             _ => None,
         }
     }
+
+    pub fn positions(&self) -> Vec<Pos> {
+        match self {
+            CtxT::Tree(tr) => tr
+                .get_paths()
+                .into_iter()
+                .map(|(x, _)| Pos::Path(x))
+                .collect(),
+            CtxT::Ctx(ctx) => (0..ctx.len()).map(Pos::Level).collect(),
+        }
+    }
 }
 
 impl TermT {

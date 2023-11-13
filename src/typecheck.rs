@@ -10,12 +10,15 @@ use crate::{
     term::{ArgsT, ArgsWithTypeT, CtxT, LabelT, TermT, TypeT},
 };
 
-type Local = HashMap<Name, (Pos, TypeT)>;
+pub struct Local {
+    pub ctx: CtxT,
+    pub map: HashMap<Name, (Pos, TypeT)>,
+}
 
 impl Tree<NoDispOption<Name>> {
     pub fn to_map(&self) -> Local {
         let pairs = self.get_paths();
-        pairs
+        let map = pairs
             .into_iter()
             .filter_map(|(path, mname)| {
                 mname.0.clone().map(|name| {
@@ -23,7 +26,12 @@ impl Tree<NoDispOption<Name>> {
                     (name, (Pos::Path(path), ty))
                 })
             })
-            .collect()
+            .collect();
+
+        Local {
+            ctx: CtxT::Tree(self.clone()),
+            map,
+        }
     }
 }
 
@@ -113,6 +121,7 @@ impl Term {
     ) -> Result<(TermT, TypeT), TypeCheckError> {
         match self {
             Term::Var(x) => local
+                .map
                 .get(x)
                 .map(|(p, ty)| (TermT::Var(p.clone()), ty.clone()))
                 .ok_or(TypeCheckError::UnknownVariable(x.clone())),
@@ -120,7 +129,7 @@ impl Term {
                 let (ctx, tm, ty) = head.infer(env)?;
                 let awt = args.args.infer(env, local, &ctx)?;
                 if let Some(t) = &args.ty {
-                    t.check(env, local, &awt.ty.eval(&SemCtx::id(), env))?;
+                    t.check(env, local, &awt.ty.eval(&SemCtx::id(ctx.positions()), env))?;
                 }
 
                 Ok((
@@ -140,7 +149,7 @@ impl Type {
             Type::Arr(s, a, t) => {
                 let (st, ty1) = s.check(env, local)?;
                 let (tt, ty2) = t.check(env, local)?;
-                let sem_ctx = SemCtx::id();
+                let sem_ctx = SemCtx::id(local.ctx.positions());
                 let ty1n = ty1.eval(&sem_ctx, env);
                 let ty2n = ty2.eval(&sem_ctx, env);
                 if ty1n != ty2n {
@@ -167,7 +176,7 @@ impl Type {
             match to_check {
                 Type::Base => return Err(TypeCheckError::DimensionMismatch),
                 Type::Arr(s1, a, t1) => {
-                    let sem_ctx = SemCtx::id();
+                    let sem_ctx = SemCtx::id(local.ctx.positions());
                     let (s1t, _) = s1.check(env, local)?;
                     let s1n = s1t.eval(&sem_ctx, env);
                     if &s1n != s2 {
@@ -217,7 +226,10 @@ impl Label {
                 .as_ref()
                 .ok_or(TypeCheckError::LocMaxMissing)?
                 .check(env, local)?;
-            return Ok((Tree::singleton(tm), ty.eval(&SemCtx::id(), env)));
+            return Ok((
+                Tree::singleton(tm),
+                ty.eval(&SemCtx::id(local.ctx.positions()), env),
+            ));
         }
         let mut branches = vec![];
         let mut el_norm = vec![];
@@ -245,7 +257,7 @@ impl Label {
             .map(|(el, eln)| match &el.0 {
                 Some(tm) => {
                     let tmt = tm.check(env, local)?.0;
-                    let tmn = tmt.eval(&SemCtx::id(), env);
+                    let tmn = tmt.eval(&SemCtx::id(local.ctx.positions()), env);
                     if tmn != eln {
                         Err(TypeCheckError::TermMismatch(tmn, eln))
                     } else {
@@ -265,9 +277,9 @@ impl Args {
         &self,
         env: &Environment,
         local: &Local,
-        ctx: &CtxT,
+        ctxt: &CtxT,
     ) -> Result<ArgsWithTypeT, TypeCheckError> {
-        match (ctx, self) {
+        match (ctxt, self) {
             (CtxT::Ctx(ctx), Args::Sub(sub)) => {
                 let (args, tys): (Vec<TermT>, Vec<TypeT>) = sub
                     .iter()
@@ -280,7 +292,7 @@ impl Args {
                     ty: Box::new(tys[0].clone()),
                 };
 
-                let sem_ctx = SemCtx::id();
+                let sem_ctx = SemCtx::id(ctxt.positions());
 
                 let args_sem_ctx = awt.eval(&sem_ctx, env);
 
@@ -310,19 +322,23 @@ impl Args {
 }
 
 impl Ctx {
-    pub fn check(&self, env: &Environment) -> Result<(CtxT, Local), TypeCheckError> {
+    pub fn check(&self, env: &Environment) -> Result<Local, TypeCheckError> {
         match self {
-            Ctx::Tree(tr) => Ok((CtxT::Tree(tr.clone()), tr.to_map())),
+            Ctx::Tree(tr) => Ok(tr.to_map()),
             Ctx::Other(ctx) => {
-                let mut ctxt = vec![];
-                let mut local = HashMap::new();
+                let mut local = Local {
+                    ctx: CtxT::Ctx(vec![]),
+                    map: HashMap::new(),
+                };
                 for (level, (name, ty)) in ctx.iter().enumerate() {
                     let tyt = ty.infer(env, &local)?;
-                    ctxt.push((Some(name.clone()), tyt.clone()));
-                    local.insert(name.clone(), (Pos::Level(level), tyt));
+                    if let CtxT::Ctx(ctxt) = &mut local.ctx {
+                        ctxt.push((Some(name.clone()), tyt.clone()));
+                    }
+                    local.map.insert(name.clone(), (Pos::Level(level), tyt));
                 }
 
-                Ok((CtxT::Ctx(ctxt), local))
+                Ok(local)
             }
         }
     }

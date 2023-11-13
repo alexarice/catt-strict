@@ -18,15 +18,18 @@ impl SemCtx {
         SemCtx { map, ty }
     }
 
-    pub fn id() -> Self {
-        SemCtx::new(HashMap::new(), TypeN::base())
+    pub fn id(positions: impl IntoIterator<Item = Pos>) -> Self {
+        SemCtx::new(
+            positions
+                .into_iter()
+                .map(|pos| (pos.clone(), TermN::Variable(pos)))
+                .collect(),
+            TypeN::base(),
+        )
     }
 
     pub fn get(&self, pos: &Pos) -> TermN {
-        self.map
-            .get(pos)
-            .cloned()
-            .unwrap_or(TermN::Variable(pos.clone()))
+        self.map.get(pos).cloned().unwrap()
     }
 
     pub fn get_ty(&self) -> TypeN {
@@ -137,11 +140,19 @@ impl TermT {
                 let sem_ty = ctx.get_ty();
                 let dim = sem_ty.dim();
 
+                let mut tree = tr.clone();
+
                 let mut tyt = *ty.clone();
 
-                let mut args = tr.path_tree().map(&|p| ctx.get(&Pos::Path(p)));
+                for _ in 0..dim {
+                    tree = tree.susp();
+                    tyt = TypeT::Susp(Box::new(tyt));
+                }
 
-                let mut tree = tr.clone();
+                let mut args = tr
+                    .path_tree()
+                    .map(&|p| ctx.get(&Pos::Path(p)))
+                    .unrestrict(sem_ty);
 
                 if let Some(insertion) = &env.reduction.insertion {
                     while let Some((p, tr, ty_inner, args_inner)) =
@@ -160,15 +171,18 @@ impl TermT {
                             },
                         );
                         tree.insertion(p.clone(), tr);
-                        args.insertion(p.clone(), args_inner)
+                        args.insertion(p.clone(), args_inner);
                     }
                 }
 
-                let tyn = tyt.eval(&SemCtx::id(), env);
+                let tyn = tyt.eval(
+                    &SemCtx::id(tree.get_paths().into_iter().map(|(x, _)| Pos::Path(x))),
+                    env,
+                );
 
-                let (final_ty, ty_susp) = tyn.de_susp(tr.susp_level());
+                let (final_ty, susp) = tyn.de_susp(tree.susp_level());
 
-                for _ in 0..ty_susp {
+                for _ in 0..susp {
                     tree = tree.branches.remove(0);
                 }
 
@@ -223,9 +237,9 @@ impl TermT {
                     HeadN {
                         tree,
                         ty: final_ty,
-                        susp: dim + ty_susp,
+                        susp,
                     },
-                    args.unrestrict(sem_ty),
+                    args,
                 )
             }
         }
@@ -355,9 +369,7 @@ impl LabelT {
                     inner.path_tree().map(&|p| TermN::Variable(Pos::Path(p))),
                 )
                 .to_args(ty)
-                .map(&|tm| tm.quote());
-
-                l.elements.splice(bp.here..bp.here + 2, inner_args.elements);
+                .map(&|tm| TermT::Include(Box::new(tm.quote()), bp.here..=bp.here + inner_size));
                 l.branches.splice(bp.here..bp.here + 1, inner_args.branches);
 
                 l

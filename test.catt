@@ -10,10 +10,18 @@ let disc = coh[(x(f)y): x -> y]
 
 normalise (a: *) (b: a -> a) | disc(b)
 
-let comp = coh[(x(f)y(g)z): x -> z]
+let comp = coh[(y(f)z(g)w): y -> w]
 
 let endo = coh[(x(f)y(g)z): comp(f,g) -> comp(f,g)]
 
 normalise (a: *) (b: a -> a) | endo(b,b)
 
 normalise (a: *) (b: a -> a) | comp(id(a),b)
+
+let whisk_r = coh[((f(a)g)(h)) : comp(f,h) -> comp(g,h)]
+
+let whisk_l = coh[((f)(g(a)h)) : comp(f,g) -> comp(f,h)]
+
+let swap = coh[((f(a)g)(i(b)k)) : comp(whisk_r(a,i), whisk_l(g,b)) -> comp(whisk_l(f,b), whisk_r(a,k))]
+
+let eh (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x)) : comp(a,b) -> comp(b,a) = swap(a,b)
