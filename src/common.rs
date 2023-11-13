@@ -61,6 +61,21 @@ impl<T> Tree<T> {
             .unwrap_or_default()
     }
 
+    pub fn bdry_set(&self, n: usize, src: bool) -> Vec<&T> {
+        if n == 0 {
+            if src {
+                vec![self.elements.first().unwrap()]
+            } else {
+                vec![self.elements.last().unwrap()]
+            }
+        } else {
+            self.elements
+                .iter()
+                .chain(self.branches.iter().flat_map(|br| br.bdry_set(n - 1, src)))
+                .collect()
+        }
+    }
+
     pub fn susp_level(&self) -> usize {
         if self.branches.len() == 1 {
             1 + self.branches[0].susp_level()
@@ -232,6 +247,15 @@ pub struct Path {
     pub path: Vec<usize>,
 }
 
+impl Display for Path {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for x in self.path.iter().rev() {
+	    write!(f, "{x},")?;
+	}
+	write!(f, "{}", self.here)
+    }
+}
+
 impl Path {
     pub fn susp(self) -> Self {
         self.extend(0)
@@ -285,16 +309,6 @@ impl Path {
 
     pub fn fst_mut(&mut self) -> &mut usize {
         self.path.last_mut().unwrap_or(&mut self.here)
-    }
-}
-
-impl Display for Path {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for x in self.path.iter().rev() {
-            write!(f, "{x}")?;
-        }
-        write!(f, "{}", self.here)?;
-        Ok(())
     }
 }
 

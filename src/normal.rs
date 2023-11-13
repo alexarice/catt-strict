@@ -1,4 +1,9 @@
-use crate::common::{Name, NoDispOption, Path, Pos, Tree};
+use std::collections::HashSet;
+
+use crate::{
+    common::{Name, NoDispOption, Path, Pos, Tree},
+    typecheck::Support,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HeadN {
@@ -75,6 +80,20 @@ impl TermN {
                 branches: vec![tr],
             })
     }
+
+    pub fn free_vars(&self, set: &mut HashSet<Path>) {
+        match self {
+            TermN::Variable(Pos::Path(p)) => {
+                set.insert(p.clone());
+            }
+            TermN::Variable(_) => {}
+            TermN::Other(_, args) => {
+                for (_, tm) in args.get_paths() {
+                    tm.free_vars(set);
+                }
+            }
+        }
+    }
 }
 
 impl TypeN {
@@ -118,6 +137,56 @@ impl TypeN {
         )];
         base.extend(self.0.into_iter().map(|(s, t)| (s.susp(), t.susp())));
         TypeN(base)
+    }
+
+    pub fn free_vars(self) -> HashSet<Path> {
+        let mut set = HashSet::new();
+        for (s, t) in self.0 {
+            s.free_vars(&mut set);
+            t.free_vars(&mut set);
+        }
+        set
+    }
+
+    pub fn support_check<T>(mut self, tree: &Tree<T>, support: &Support) -> bool {
+        match support {
+            Support::FullInverse => {
+                if let Some((s, t)) = self.0.pop() {
+                    let mut src = self.free_vars();
+                    let dim = tree.dim();
+                    if dim >= 1 {
+                        let path_tree = tree.path_tree();
+                        let mut tgt = src.clone();
+                        s.free_vars(&mut src);
+                        t.free_vars(&mut tgt);
+
+                        if (path_tree
+                            .bdry_set(dim - 1, true)
+                            .into_iter()
+                            .cloned()
+                            .collect::<HashSet<_>>()
+                            == src)
+                            && (path_tree
+                                .bdry_set(dim - 1, false)
+                                .into_iter()
+                                .cloned()
+                                .collect::<HashSet<_>>()
+                                == tgt)
+                        {
+                            return true;
+                        }
+                    } else {
+                        s.free_vars(&mut src);
+                    }
+                    t.free_vars(&mut src);
+
+                    tree.get_paths().into_iter().all(|(p, _)| src.contains(&p))
+                } else {
+                    false
+                }
+            }
+            Support::NoInverse => true,
+        }
     }
 }
 

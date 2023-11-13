@@ -81,6 +81,8 @@ pub enum TypeCheckError {
     CannotCheck(Term),
     #[error("Type checking {0} is unsupported")]
     UnsupportedCheck(Type),
+    #[error("Support check failed for type {0:?}")]
+    SupportCheck(TypeT),
 }
 
 impl Term {
@@ -101,8 +103,11 @@ impl Term {
                 .map(|(ctx, _, ty)| (ctx, TermT::TopLvl(x.clone()), ty))
                 .ok_or(TypeCheckError::UnknownTopLevel(x.clone())),
             Term::Coh(tr, ty) => {
-                let tyt = ty.infer(env, &tr.to_map())?;
-                // TODO: Support check
+                let (tyt, tyn) = ty.infer(env, &tr.to_map())?;
+
+		if ! tyn.support_check(tr, &env.support) {
+		    return Err(TypeCheckError::SupportCheck(tyt))
+		}
 
                 Ok((
                     CtxT::Tree(tr.clone()),
@@ -143,22 +148,32 @@ impl Term {
 }
 
 impl Type {
-    pub fn infer(&self, env: &Environment, local: &Local) -> Result<TypeT, TypeCheckError> {
+    pub fn infer(&self, env: &Environment, local: &Local) -> Result<(TypeT, TypeN), TypeCheckError> {
         match self {
-            Type::Base => Ok(TypeT::Base),
+            Type::Base => Ok((TypeT::Base, TypeN(vec![]))),
             Type::Arr(s, a, t) => {
                 let (st, ty1) = s.check(env, local)?;
                 let (tt, ty2) = t.check(env, local)?;
                 let sem_ctx = SemCtx::id(local.ctx.positions());
+		let sn = st.eval(&sem_ctx, env);
                 let ty1n = ty1.eval(&sem_ctx, env);
+		let tn = tt.eval(&sem_ctx, env);
                 let ty2n = ty2.eval(&sem_ctx, env);
                 if ty1n != ty2n {
                     return Err(TypeCheckError::TypeMismatch(ty1n, ty2n));
                 }
-                if let Some(ty) = a {
-                    ty.check(env, local, &ty1n)?;
-                }
-                Ok(TypeT::Arr(st, Box::new(ty1n.quote()), tt))
+                let (tyt, mut tyn) = if let Some(ty) = a {
+                    let (tyt, tyn) = ty.infer(env, local)?;
+		    if tyn != ty1n {
+			return Err(TypeCheckError::TypeMismatch(tyn, ty1n));
+		    }
+		    (tyt, tyn)
+                } else {
+		    (ty1n.quote(), ty1n)
+		};
+
+		tyn.0.push((sn, tn));
+		Ok((TypeT::Arr(st, Box::new(tyt), tt), tyn))
             }
             ty => Err(TypeCheckError::UnsupportedCheck(ty.clone())),
         }
@@ -170,38 +185,11 @@ impl Type {
         local: &Local,
         ty: &TypeN,
     ) -> Result<(), TypeCheckError> {
-        let mut to_check = self;
-
-        for (s2, t2) in ty.0.iter().rev() {
-            match to_check {
-                Type::Base => return Err(TypeCheckError::DimensionMismatch),
-                Type::Arr(s1, a, t1) => {
-                    let sem_ctx = SemCtx::id(local.ctx.positions());
-                    let (s1t, _) = s1.check(env, local)?;
-                    let s1n = s1t.eval(&sem_ctx, env);
-                    if &s1n != s2 {
-                        return Err(TypeCheckError::TermMismatch(s1n, s2.clone()));
-                    }
-                    let (t1t, _) = t1.check(env, local)?;
-                    let t1n = t1t.eval(&sem_ctx, env);
-                    if &t1n != t2 {
-                        return Err(TypeCheckError::TermMismatch(t1n, t2.clone()));
-                    }
-                    if let Some(ty) = a {
-                        to_check = &**ty;
-                    } else {
-                        to_check = &Type::Base;
-                        break;
-                    }
-                }
-                ty => return Err(TypeCheckError::UnsupportedCheck(ty.clone())),
-            }
-        }
-        if to_check != &Type::Base {
-            return Err(TypeCheckError::DimensionMismatch);
-        }
-
-        Ok(())
+        let (_, tyn) = self.infer(env, local)?;
+	if &tyn != ty {
+	    return Err(TypeCheckError::TypeMismatch(tyn, ty.clone()));
+	}
+	Ok(())
     }
 }
 
@@ -331,7 +319,7 @@ impl Ctx {
                     map: HashMap::new(),
                 };
                 for (level, (name, ty)) in ctx.iter().enumerate() {
-                    let tyt = ty.infer(env, &local)?;
+                    let (tyt, _) = ty.infer(env, &local)?;
                     if let CtxT::Ctx(ctxt) = &mut local.ctx {
                         ctxt.push((Some(name.clone()), tyt.clone()));
                     }
