@@ -4,7 +4,7 @@ use crate::{
     common::Name,
     eval::SemCtx,
     syntax::{ctx, ident, term, ty, Ctx, Term, Type},
-    typecheck::{Environment, TypeCheckError},
+    typecheck::Environment,
 };
 
 pub enum Command {
@@ -38,7 +38,7 @@ pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
 }
 
 impl Command {
-    pub fn run(self, env: &mut Environment) -> Result<(), TypeCheckError> {
+    pub fn run(self, env: &mut Environment) -> eyre::Result<()> {
         println!("----------------------------------------");
         match self {
             Command::LetHead(nm, h) => {

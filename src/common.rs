@@ -149,14 +149,12 @@ impl<T> Tree<T> {
         }
     }
 
-    pub fn label_from_max<'a, S: Clone + 'a>(
+    pub fn label_from_max<S>(
         &self,
         iter: &mut impl Iterator<Item = S>,
     ) -> Option<Tree<NoDispOption<S>>> {
         if self.branches.is_empty() {
-            return iter
-                .next()
-                .map(|i| Tree::singleton(NoDispOption(Some(i.clone()))));
+            return iter.next().map(|i| Tree::singleton(NoDispOption(Some(i))));
         }
         let branches = self
             .branches
@@ -250,9 +248,9 @@ pub struct Path {
 impl Display for Path {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for x in self.path.iter().rev() {
-	    write!(f, "{x},")?;
-	}
-	write!(f, "{}", self.here)
+            write!(f, "{x},")?;
+        }
+        write!(f, "{}", self.here)
     }
 }
 
