@@ -3,7 +3,7 @@ use std::ops::RangeInclusive;
 use derivative::Derivative;
 
 use crate::{
-    common::{Name, NoDispOption, Pos, Tree},
+    common::{Name, NoDispOption, Pos, Spanned, Tree},
     syntax::{Args, ArgsWithType, Term, Type},
 };
 
@@ -69,50 +69,60 @@ impl CtxT {
 }
 
 impl TermT {
-    pub fn to_expr(&self, ctx: Option<&CtxT>, with_ict: bool) -> Term {
+    pub fn to_expr(&self, ctx: Option<&CtxT>, with_ict: bool) -> Term<()> {
         match self {
             TermT::App(tm, args) => Term::App(
                 Box::new(tm.to_expr(None, with_ict)),
                 args.to_expr(ctx, with_ict),
+                (),
             ),
             TermT::Var(x) => Term::Var(
                 ctx.and_then(|c| c.get_name(x))
                     .unwrap_or(Name(x.to_string())),
+                (),
             ),
-            TermT::TopLvl(nm) => Term::Var(nm.clone()),
-            TermT::Susp(t) => Term::Susp(Box::new(t.to_expr(None, with_ict))),
+            TermT::TopLvl(nm) => Term::Var(nm.clone(), ()),
+            TermT::Susp(t) => Term::Susp(Box::new(t.to_expr(None, with_ict)), ()),
             TermT::Coh(tr, ty) => Term::Coh(
                 tr.clone(),
                 Box::new(ty.to_expr(Some(&CtxT::Tree(tr.clone())), with_ict)),
+                (),
             ),
             TermT::Include(tm, rng) => {
-                Term::Include(Box::new(tm.to_expr(ctx, with_ict)), rng.clone())
+                Term::Include(Box::new(tm.to_expr(ctx, with_ict)), rng.clone(), ())
             }
         }
     }
 }
 
 impl ArgsT {
-    pub fn to_expr(&self, ctx: Option<&CtxT>, with_ict: bool) -> Args {
+    pub fn to_expr(&self, ctx: Option<&CtxT>, with_ict: bool) -> Args<()> {
         match self {
-            ArgsT::Sub(s) => Args::Sub(s.iter().map(|tm| tm.to_expr(ctx, with_ict)).collect()),
-            ArgsT::Label(l) => Args::Label(if !with_ict {
-                l.label_from_max(
-                    &mut l
-                        .get_maximal_elements()
-                        .into_iter()
-                        .map(|tm| tm.to_expr(ctx, with_ict)),
-                )
-                .unwrap()
-            } else {
-                l.map_ref(&|tm| NoDispOption(Some(tm.to_expr(ctx, with_ict))))
-            }),
+            ArgsT::Sub(s) => Args::Sub(Spanned(
+                s.iter().map(|tm| tm.to_expr(ctx, with_ict)).collect(),
+                (),
+            )),
+            ArgsT::Label(l) => Args::Label(Spanned(
+                if !with_ict {
+                    l.label_from_max(
+                        &mut l
+                            .get_maximal_elements()
+                            .into_iter()
+                            .map(|tm| tm.to_expr(ctx, with_ict)),
+                    )
+                    .unwrap()
+                    .map(&|x| Spanned(x, ()))
+                } else {
+                    l.map_ref(&|tm| Spanned(NoDispOption(Some(tm.to_expr(ctx, with_ict))), ()))
+                },
+                (),
+            )),
         }
     }
 }
 
 impl ArgsWithTypeT {
-    pub fn to_expr(&self, ctx: Option<&CtxT>, with_ict: bool) -> ArgsWithType {
+    pub fn to_expr(&self, ctx: Option<&CtxT>, with_ict: bool) -> ArgsWithType<()> {
         ArgsWithType {
             args: self.args.to_expr(ctx, with_ict),
             ty: with_ict.then_some(Box::new(self.ty.to_expr(ctx, with_ict))),
@@ -121,19 +131,21 @@ impl ArgsWithTypeT {
 }
 
 impl TypeT {
-    pub fn to_expr(&self, ctx: Option<&CtxT>, with_ict: bool) -> Type {
+    pub fn to_expr(&self, ctx: Option<&CtxT>, with_ict: bool) -> Type<()> {
         match self {
-            TypeT::Base => Type::Base,
+            TypeT::Base => Type::Base(()),
             TypeT::Arr(s, a, t) => Type::Arr(
                 s.to_expr(ctx, with_ict),
                 with_ict.then_some(Box::new(a.to_expr(ctx, with_ict))),
                 t.to_expr(ctx, with_ict),
+                (),
             ),
             TypeT::App(ty, args) => Type::App(
                 Box::new(ty.to_expr(ctx, with_ict)),
                 args.to_expr(ctx, with_ict),
+                (),
             ),
-            TypeT::Susp(ty) => Type::Susp(Box::new(ty.to_expr(ctx, with_ict))),
+            TypeT::Susp(ty) => Type::Susp(Box::new(ty.to_expr(ctx, with_ict)), ()),
         }
     }
 }
@@ -143,7 +155,7 @@ impl CtxT {
         match self {
             CtxT::Tree(tr) => {
                 let new_tree = Tree {
-                    elements: vec![NoDispOption(None), NoDispOption(None)],
+                    elements: vec![NoDispOption::default(), NoDispOption::default()],
                     branches: vec![tr],
                 };
                 CtxT::Tree(new_tree)

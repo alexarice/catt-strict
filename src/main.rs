@@ -7,9 +7,7 @@ use catt_strict::{
 };
 use chumsky::prelude::*;
 
-fn main() -> color_eyre::Result<()> {
-    color_eyre::install()?;
-
+fn main() {
     let filename = std::env::args().nth(1).unwrap();
     let src = std::fs::read_to_string(&filename).unwrap();
 
@@ -31,7 +29,13 @@ fn main() -> color_eyre::Result<()> {
             };
 
             for cmd in cmds {
-                cmd.run(&mut env)?;
+                match cmd.run(&mut env) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        e.to_report(()).print(Source::from(&src)).unwrap();
+                        break;
+                    }
+                }
             }
         }
         Err(errs) => errs.into_iter().for_each(|e| {
@@ -47,5 +51,4 @@ fn main() -> color_eyre::Result<()> {
                 .unwrap()
         }),
     }
-    Ok(())
 }

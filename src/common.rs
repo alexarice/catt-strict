@@ -26,9 +26,9 @@ pub struct NoDispOption<T>(pub Option<T>);
 
 impl<T: Display> Display for NoDispOption<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.0 {
-            Some(e) => e.fmt(f),
-            None => Ok(()),
+        match &self {
+            NoDispOption(Some(e)) => e.fmt(f),
+            _ => Ok(()),
         }
     }
 }
@@ -40,6 +40,23 @@ impl<T> PartialEq for NoDispOption<T> {
 }
 
 impl<T> Eq for NoDispOption<T> {}
+
+#[derive(Clone, Debug)]
+pub struct Spanned<T, S>(pub T, pub S);
+
+impl<T: Display, S> Display for Spanned<T, S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl<T: PartialEq, S> PartialEq for Spanned<T, S> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.eq(&other.0)
+    }
+}
+
+impl<T: Eq, S> Eq for Spanned<T, S> {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Tree<T> {

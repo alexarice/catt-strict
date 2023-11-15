@@ -1,44 +1,67 @@
-use crate::common::{Name, NoDispOption, Tree};
+use crate::common::{Name, NoDispOption, Spanned, Tree};
 use chumsky::{prelude::*, text::keyword};
 use itertools::Itertools;
-use std::{fmt::Display, ops::RangeInclusive};
+use std::{
+    fmt::Display,
+    ops::{Range, RangeInclusive},
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ArgsWithType {
-    pub args: Args,
-    pub ty: Option<Box<Type>>,
+pub struct ArgsWithType<S> {
+    pub args: Args<S>,
+    pub ty: Option<Box<Type<S>>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Term {
-    App(Box<Term>, ArgsWithType),
-    Susp(Box<Term>),
-    Var(Name),
-    Coh(Tree<NoDispOption<Name>>, Box<Type>),
-    Include(Box<Term>, RangeInclusive<usize>),
+pub enum Term<S> {
+    App(Box<Term<S>>, ArgsWithType<S>, S),
+    Susp(Box<Term<S>>, S),
+    Var(Name, S),
+    Coh(Tree<NoDispOption<Name>>, Box<Type<S>>, S),
+    Include(Box<Term<S>>, RangeInclusive<usize>, S),
 }
 
-pub type Sub = Vec<Term>;
-pub type Label = Tree<NoDispOption<Term>>;
+pub type Sub<S> = Vec<Term<S>>;
+pub type Label<S> = Tree<Spanned<NoDispOption<Term<S>>, S>>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Args {
-    Sub(Sub),
-    Label(Label),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Type {
-    Base,
-    Arr(Term, Option<Box<Type>>, Term),
-    App(Box<Type>, ArgsWithType),
-    Susp(Box<Type>),
+pub enum Args<S> {
+    Sub(Spanned<Sub<S>, S>),
+    Label(Spanned<Label<S>, S>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Ctx {
+pub enum Type<S> {
+    Base(S),
+    Arr(Term<S>, Option<Box<Type<S>>>, Term<S>, S),
+    App(Box<Type<S>>, ArgsWithType<S>, S),
+    Susp(Box<Type<S>>, S),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Ctx<S> {
     Tree(Tree<NoDispOption<Name>>),
-    Other(Vec<(Name, Type)>),
+    Other(Vec<(Name, Type<S>)>),
+}
+
+impl<S> Term<S> {
+    pub fn span(&self) -> &S {
+        match self {
+            Term::App(_, _, s)
+            | Term::Susp(_, s)
+            | Term::Var(_, s)
+            | Term::Coh(_, _, s)
+            | Term::Include(_, _, s) => s,
+        }
+    }
+}
+
+impl<S> Type<S> {
+    pub fn span(&self) -> &S {
+        match self {
+            Type::Base(s) | Type::Arr(_, _, _, s) | Type::App(_, _, s) | Type::Susp(_, s) => s,
+        }
+    }
 }
 
 fn tree<O: 'static, P>(el: P) -> impl Parser<char, Tree<O>, Error = Simple<char>> + Clone
@@ -62,7 +85,7 @@ where
 }
 
 pub fn ident() -> impl Parser<char, Name, Error = Simple<char>> + Clone {
-    text::ident().padded().try_map(|x, span| {
+    text::ident().try_map(|x, span| {
         if x == "coh" || x == "let" || x == "_" {
             Err(Simple::custom(
                 span,
@@ -74,9 +97,9 @@ pub fn ident() -> impl Parser<char, Name, Error = Simple<char>> + Clone {
     })
 }
 
-fn atom<P>(term: P) -> impl Parser<char, Term, Error = Simple<char>> + Clone
+fn atom<P>(term: P) -> impl Parser<char, Term<Range<usize>>, Error = Simple<char>> + Clone
 where
-    P: Parser<char, Term, Error = Simple<char>> + Clone + 'static,
+    P: Parser<char, Term<Range<usize>>, Error = Simple<char>> + Clone + 'static,
 {
     keyword("coh")
         .ignore_then(
@@ -85,30 +108,40 @@ where
                 .then(just(":").ignore_then(ty_internal(term.clone()).padded()))
                 .delimited_by(just("["), just("]"))
                 .padded()
-                .map(|(ctx, ty)| Term::Coh(ctx, Box::new(ty))),
+                .map_with_span(|(ctx, ty), sp| Term::Coh(ctx, Box::new(ty), sp)),
         )
-        .or(ident().map(Term::Var))
+        .or(ident().map_with_span(Term::Var))
         .or(just("‼")
             .ignore_then(term.padded().delimited_by(just("("), just(")")))
-            .map(|t| Term::Susp(Box::new(t))))
+            .map_with_span(|t, sp| Term::Susp(Box::new(t), sp)))
 }
 
-fn args<P>(term: P) -> impl Parser<char, Args, Error = Simple<char>> + Clone
+fn args<P>(term: P) -> impl Parser<char, Args<Range<usize>>, Error = Simple<char>> + Clone
 where
-    P: Parser<char, Term, Error = Simple<char>> + Clone + 'static,
+    P: Parser<char, Term<Range<usize>>, Error = Simple<char>> + Clone + 'static,
 {
     term.clone()
         .padded()
         .separated_by(just(","))
         .at_least(1)
         .delimited_by(just("("), just(")"))
+        .map_with_span(Spanned)
         .map(Args::Sub)
-        .or(tree(term.or_not().map(NoDispOption).padded()).map(Args::Label))
+        .or(tree(
+            term.or_not()
+                .map(NoDispOption)
+                .map_with_span(Spanned)
+                .padded(),
+        )
+        .map_with_span(Spanned)
+        .map(Args::Label))
 }
 
-fn args_with_type<P>(term: P) -> impl Parser<char, ArgsWithType, Error = Simple<char>> + Clone
+fn args_with_type<P>(
+    term: P,
+) -> impl Parser<char, ArgsWithType<Range<usize>>, Error = Simple<char>> + Clone
 where
-    P: Parser<char, Term, Error = Simple<char>> + Clone + 'static,
+    P: Parser<char, Term<Range<usize>>, Error = Simple<char>> + Clone + 'static,
 {
     args(term.clone())
         .then(
@@ -121,17 +154,17 @@ where
         .map(|(args, ty)| ArgsWithType { args, ty })
 }
 
-fn ty_internal<P>(term: P) -> impl Parser<char, Type, Error = Simple<char>> + Clone
+fn ty_internal<P>(term: P) -> impl Parser<char, Type<Range<usize>>, Error = Simple<char>> + Clone
 where
-    P: Parser<char, Term, Error = Simple<char>> + Clone,
+    P: Parser<char, Term<Range<usize>>, Error = Simple<char>> + Clone,
 {
     let arr = term
         .clone()
         .then(just("->").padded().ignore_then(term.clone()));
 
     just("*")
-        .to(Type::Base)
-        .or(arr.map(|(s, t)| Type::Arr(s, None, t)))
+        .map_with_span(|_, sp| Type::Base(sp))
+        .or(arr.map_with_span(|(s, t), sp| Type::Arr(s, None, t, sp)))
         .then(
             just("|")
                 .padded()
@@ -140,14 +173,15 @@ where
                         .padded()
                         .then(just("->").ignore_then(term.padded())),
                 )
+                .map_with_span(|x, sp| (x, sp))
                 .repeated(),
         )
-        .foldl(|a, (s, t)| Type::Arr(s, Some(Box::new(a)), t))
+        .foldl(|a, ((s, t), sp)| Type::Arr(s, Some(Box::new(a)), t, sp))
 }
 
-fn ctx_internal<P>(term: P) -> impl Parser<char, Ctx, Error = Simple<char>> + Clone
+fn ctx_internal<P>(term: P) -> impl Parser<char, Ctx<Range<usize>>, Error = Simple<char>> + Clone
 where
-    P: Parser<char, Term, Error = Simple<char>> + Clone,
+    P: Parser<char, Term<Range<usize>>, Error = Simple<char>> + Clone,
 {
     tree(ident().padded().or_not().map(NoDispOption))
         .map(Ctx::Tree)
@@ -161,24 +195,31 @@ where
             .map(Ctx::Other))
 }
 
-pub fn term() -> impl Parser<char, Term, Error = Simple<char>> + Clone {
+pub fn term() -> impl Parser<char, Term<Range<usize>>, Error = Simple<char>> + Clone {
     recursive(|term| {
         atom(term.clone())
+            .map_with_span(|t, sp| (t, sp.start()))
             .padded()
-            .then(args_with_type(term.clone()).padded().repeated())
-            .foldl(|t, a| Term::App(Box::new(t), a))
+            .then(
+                args_with_type(term.clone())
+                    .padded()
+                    .map_with_span(|a, sp| (a, sp.end()))
+                    .repeated(),
+            )
+            .foldl(|(t, start), (a, end)| (Term::App(Box::new(t), a, start..end), start))
+            .map(|(t, _)| t)
     })
 }
 
-pub fn ty() -> impl Parser<char, Type, Error = Simple<char>> {
+pub fn ty() -> impl Parser<char, Type<Range<usize>>, Error = Simple<char>> {
     ty_internal(term())
 }
 
-pub fn ctx() -> impl Parser<char, Ctx, Error = Simple<char>> {
+pub fn ctx() -> impl Parser<char, Ctx<Range<usize>>, Error = Simple<char>> {
     ctx_internal(term())
 }
 
-impl Display for ArgsWithType {
+impl<S> Display for ArgsWithType<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.args.fmt(f)?;
         if let Some(typ) = &self.ty {
@@ -188,23 +229,23 @@ impl Display for ArgsWithType {
     }
 }
 
-impl Display for Term {
+impl<S> Display for Term<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Term::App(t, a) => {
+            Term::App(t, a, _) => {
                 t.fmt(f)?;
                 a.fmt(f)?;
             }
-            Term::Susp(head) => {
+            Term::Susp(head, _) => {
                 write!(f, "‼({head})")?;
             }
-            Term::Var(x) => {
+            Term::Var(x, _) => {
                 x.fmt(f)?;
             }
-            Term::Coh(ctx, ty) => {
+            Term::Coh(ctx, ty, _) => {
                 write!(f, "coh [{} : {}]", ctx, ty)?;
             }
-            Term::Include(tm, rng) => {
+            Term::Include(tm, rng, _) => {
                 write!(f, "inc<{}-{}>({tm})", rng.start(), rng.end())?;
             }
         }
@@ -212,34 +253,36 @@ impl Display for Term {
     }
 }
 
-impl Display for Args {
+impl<S> Display for Args<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Args::Sub(args) => write!(f, "({})", args.iter().map(ToString::to_string).join(",")),
-            Args::Label(l) => l.fmt(f),
+            Args::Sub(Spanned(args, _)) => {
+                write!(f, "({})", args.iter().map(ToString::to_string).join(","))
+            }
+            Args::Label(Spanned(l, _)) => l.fmt(f),
         }
     }
 }
 
-impl Display for Type {
+impl<S> Display for Type<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::Base => f.write_str("*"),
-            Type::Arr(s, a, t) => match a {
+            Type::Base(_) => f.write_str("*"),
+            Type::Arr(s, a, t, _) => match a {
                 Some(a) => write!(f, "{a} | {s} -> {t}"),
                 None => write!(f, "{s} -> {t}"),
             },
-            Type::App(ty, args) => {
+            Type::App(ty, args, _) => {
                 write!(f, "({ty}){args}")
             }
-            Type::Susp(ty) => {
+            Type::Susp(ty, _) => {
                 write!(f, "‼({ty})")
             }
         }
     }
 }
 
-impl Display for Ctx {
+impl<S> Display for Ctx<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Ctx::Tree(t) => {

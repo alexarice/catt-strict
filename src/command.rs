@@ -1,17 +1,24 @@
+use std::ops::Range;
+
 use chumsky::{prelude::Simple, primitive::just, text::TextParser, Parser};
 
 use crate::{
     common::Name,
     eval::SemCtx,
     syntax::{ctx, ident, term, ty, Ctx, Term, Type},
-    typecheck::Environment,
+    typecheck::{Environment, TypeCheckError},
 };
 
 pub enum Command {
-    LetHead(Name, Term),
-    LetCtx(Name, Ctx, Term),
-    LetWT(Name, Ctx, Type, Term),
-    Normalise(Ctx, Term),
+    LetHead(Name, Term<Range<usize>>),
+    LetCtx(Name, Ctx<Range<usize>>, Term<Range<usize>>),
+    LetWT(
+        Name,
+        Ctx<Range<usize>>,
+        Type<Range<usize>>,
+        Term<Range<usize>>,
+    ),
+    Normalise(Ctx<Range<usize>>, Term<Range<usize>>),
 }
 
 pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
@@ -38,7 +45,7 @@ pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
 }
 
 impl Command {
-    pub fn run(self, env: &mut Environment) -> eyre::Result<()> {
+    pub fn run(self, env: &mut Environment) -> Result<(), TypeCheckError<Range<usize>>> {
         println!("----------------------------------------");
         match self {
             Command::LetHead(nm, h) => {
