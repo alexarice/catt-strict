@@ -124,7 +124,7 @@ where
         .padded()
         .separated_by(just(","))
         .at_least(1)
-        .delimited_by(just("("), just(")"))
+        .delimited_by(just("<"), just(">"))
         .map_with_span(Spanned)
         .map(Args::Sub)
         .or(tree(
@@ -257,7 +257,7 @@ impl<S> Display for Args<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Args::Sub(Spanned(args, _)) => {
-                write!(f, "({})", args.iter().map(ToString::to_string).join(","))
+                write!(f, "<{}>", args.iter().map(ToString::to_string).join(","))
             }
             Args::Label(Spanned(l, _)) => l.fmt(f),
         }
