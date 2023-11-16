@@ -32,7 +32,9 @@ fn main() {
                 match cmd.run(&mut env) {
                     Ok(_) => {}
                     Err(e) => {
-                        e.to_report(()).print(Source::from(&src)).unwrap();
+                        e.to_report(&filename)
+                            .print((&filename, Source::from(&src)))
+                            .unwrap();
                         break;
                     }
                 }

@@ -1,5 +1,6 @@
-use std::collections::HashMap;
 use std::fmt::Debug;
+use std::hash::Hash;
+use std::{collections::HashMap, ops::Range};
 
 use ariadne::{Report, ReportKind, Span};
 use thiserror::Error;
@@ -95,8 +96,8 @@ pub enum TypeCheckError<S> {
     LocallyMaxMissing(Label<S>, S),
 }
 
-impl<S: Span + Clone + Debug> TypeCheckError<S> {
-    fn span(&self) -> &S {
+impl TypeCheckError<Range<usize>> {
+    fn span(&self) -> &Range<usize> {
         match self {
             TypeCheckError::UnknownTopLevel(_, s)
             | TypeCheckError::UnknownLocal(_, s)
@@ -116,85 +117,97 @@ impl<S: Span + Clone + Debug> TypeCheckError<S> {
             | TypeCheckError::TermMismatch(tm, _) => tm.span(),
         }
     }
-    pub fn to_report<Id: Into<<S::SourceId as ToOwned>::Owned>>(
+    pub fn to_report<Id: Debug + Hash + PartialEq + Eq + Clone + Copy>(
         self,
         src: Id,
-    ) -> Report<'static, S> {
+    ) -> Report<'static, (Id, Range<usize>)> {
         let mut report = Report::build(ReportKind::Error, src, self.span().start())
             .with_message(self.to_string());
 
         match self {
-            TypeCheckError::UnknownTopLevel(_, sp) => {
-                report.add_label(ariadne::Label::new(sp).with_message("Unknown top level symbol"))
-            }
-            TypeCheckError::UnknownLocal(_, sp) => {
-                report.add_label(ariadne::Label::new(sp).with_message("Unknown local variable"))
-            }
-            TypeCheckError::Fullness(ty) => report
-                .add_label(ariadne::Label::new(ty.span().clone()).with_message("Type is not full")),
+            TypeCheckError::UnknownTopLevel(_, sp) => report
+                .add_label(ariadne::Label::new((src, sp)).with_message("Unknown top level symbol")),
+            TypeCheckError::UnknownLocal(_, sp) => report
+                .add_label(ariadne::Label::new((src, sp)).with_message("Unknown local variable")),
+            TypeCheckError::Fullness(ty) => report.add_label(
+                ariadne::Label::new((src, ty.span().clone())).with_message("Type is not full"),
+            ),
             TypeCheckError::CannotInferCtx(tm) => report.add_label(
-                ariadne::Label::new(tm.span().clone()).with_message("Context cannot be inferred"),
+                ariadne::Label::new((src, tm.span().clone()))
+                    .with_message("Context cannot be inferred"),
             ),
             TypeCheckError::CannotCheckCtx(tm) => report.add_label(
-                ariadne::Label::new(tm.span().clone()).with_message("Context cannot be checked"),
+                ariadne::Label::new((src, tm.span().clone()))
+                    .with_message("Context cannot be checked"),
             ),
             TypeCheckError::CannotCheck(ty) => report.add_label(
-                ariadne::Label::new(ty.span().clone()).with_message("Type is not checkable"),
+                ariadne::Label::new((src, ty.span().clone())).with_message("Type is not checkable"),
             ),
             TypeCheckError::InferredTypesNotEqual(tm1, ty1, tm2, ty2, _) => {
                 report.add_label(
-                    ariadne::Label::new(tm2.span().clone()).with_message(format!("Has type {ty2}")),
+                    ariadne::Label::new((src, tm2.span().clone()))
+                        .with_message(format!("Has type {ty2}"))
+                        .with_order(0),
                 );
                 report.add_label(
-                    ariadne::Label::new(tm1.span().clone()).with_message(format!("Has type {ty1}")),
+                    ariadne::Label::new((src, tm1.span().clone()))
+                        .with_message(format!("Has type {ty1}"))
+                        .with_order(1),
                 );
                 report.set_note("Terms in an arrow type should have equal type");
             }
             TypeCheckError::InferredTypeWrong(tm, ity, gty) => {
                 report.add_label(
-                    ariadne::Label::new(tm.span().clone())
+                    ariadne::Label::new((src, tm.span().clone()))
                         .with_message(format!("Term has inferred type {ity}")),
                 );
                 report.add_label(
-                    ariadne::Label::new(gty.span().clone())
+                    ariadne::Label::new((src, gty.span().clone()))
                         .with_message(format!("Term should have type {gty}")),
                 );
             }
             TypeCheckError::InferredTypeWrongCalc(tm, ity, gty) => {
-                report.add_label(ariadne::Label::new(tm.span().clone()).with_message(format!(
-                    "Term has inferref type {ity} but should have type {gty}"
-                )));
+                report.add_label(ariadne::Label::new((src, tm.span().clone())).with_message(
+                    format!("Term has inferref type {ity} but should have type {gty}"),
+                ));
             }
             TypeCheckError::TypeMismatch(ty, _) => {
-                report.add_label(ariadne::Label::new(ty.span().clone()).with_message("Given type"));
+                report.add_label(
+                    ariadne::Label::new((src, ty.span().clone())).with_message("Given type"),
+                );
             }
             TypeCheckError::TermMismatch(tm, _) => {
-                report.add_label(ariadne::Label::new(tm.span().clone()).with_message("Given term"));
+                report.add_label(
+                    ariadne::Label::new((src, tm.span().clone())).with_message("Given term"),
+                );
             }
             TypeCheckError::LabelMismatch(_, _, _, sp) => {
                 report.add_label(
-                    ariadne::Label::new(sp.clone()).with_message("Term mismatch in labelling"),
+                    ariadne::Label::new((src, sp.clone()))
+                        .with_message("Term mismatch in labelling"),
                 );
             }
             TypeCheckError::DimensionMismatch(_, sp) => {
                 report.add_label(
-                    ariadne::Label::new(sp.clone()).with_message("Dimension mismatch in labelling"),
+                    ariadne::Label::new((src, sp.clone()))
+                        .with_message("Dimension mismatch in labelling"),
                 );
             }
             TypeCheckError::SubToLabel(_, sp) => {
                 report.add_label(
-                    ariadne::Label::new(sp.clone()).with_message("Substitution cannot be coerced"),
+                    ariadne::Label::new((src, sp.clone()))
+                        .with_message("Substitution cannot be coerced"),
                 );
             }
             TypeCheckError::LabelToSub(_, sp) => {
                 report.add_label(
-                    ariadne::Label::new(sp.clone())
+                    ariadne::Label::new((src, sp.clone()))
                         .with_message("Label found when substitution expected"),
                 );
             }
             TypeCheckError::LocallyMaxMissing(_, sp) => {
                 report.add_label(
-                    ariadne::Label::new(sp.clone())
+                    ariadne::Label::new((src, sp.clone()))
                         .with_message("Locally maximal argument missing"),
                 );
             }
