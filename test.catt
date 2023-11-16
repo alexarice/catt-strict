@@ -6,7 +6,7 @@ let id2 = coh [(x(f)y): f -> f]
 
 normalise (a:*) (b: a -> a) | id2(b)
 
-let disc = coh[(x(f)y): f -> y]
+let disc = coh[(x(f)y): x -> y]
 
 normalise (a: *) (b: a -> a) | disc(b)
 
