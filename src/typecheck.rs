@@ -2,7 +2,7 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::{collections::HashMap, ops::Range};
 
-use ariadne::{Report, ReportKind, Span};
+use ariadne::{Color, Fmt, Report, ReportKind, Span};
 use thiserror::Error;
 
 use crate::{
@@ -62,37 +62,37 @@ pub struct Environment {
 
 #[derive(Error, Debug)]
 pub enum TypeCheckError<S> {
-    #[error("Unknown top level name: {0}")]
+    #[error("Unknown top level name: {}", .0.fg(Color::Red))]
     UnknownTopLevel(Name, S),
-    #[error("Unknown local variable: {0}")]
+    #[error("Unknown local variable: {}", .0.fg(Color::Red))]
     UnknownLocal(Name, S),
-    #[error("Type \"{0}\" does not satisfy fullness condition")]
+    #[error("Type \"{}\" does not satisfy fullness condition", .0.fg(Color::Red))]
     Fullness(Type<S>),
-    #[error("Cannot infer context for term \"{0}\"")]
+    #[error("Cannot infer context for term \"{}\"", .0.fg(Color::Red))]
     CannotInferCtx(Term<S>),
-    #[error("Cannot check context for inferrable term \"{0}\"")]
+    #[error("Cannot check context for inferrable term \"{}\"", .0.fg(Color::Red))]
     CannotCheckCtx(Term<S>),
-    #[error("Type {0} is not checkable")]
+    #[error("Type {} is not checkable", .0.fg(Color::Red))]
     CannotCheck(Type<S>),
-    #[error("Terms did not have matching types")]
+    #[error("Terms {} and {} do not have matching types", .0.fg(Color::Blue), .2.fg(Color::Magenta))]
     InferredTypesNotEqual(Term<S>, Type<()>, Term<S>, Type<()>, S),
-    #[error("Term \"{0}\" had inferred type \"{1}\" but should have type \"{2}\"")]
+    #[error("Term \"{}\" had inferred type \"{}\" but should have type \"{}\"", .0.fg(Color::Red), .1.fg(Color::Red), .2.fg(Color::Green))]
     InferredTypeWrong(Term<S>, Type<()>, Type<S>),
-    #[error("Term \"{0}\" had inferred type \"{1}\" but should have type \"{2}\"")]
+    #[error("Term \"{}\" had inferred type \"{}\" but should have type \"{}\"", .0.fg(Color::Red), .1.fg(Color::Red), .2.fg(Color::Green))]
     InferredTypeWrongCalc(Term<S>, Type<()>, Type<()>),
-    #[error("Given type \"{0}\" does not match inferred type \"{1}\"")]
+    #[error("Given type \"{}\" does not match inferred type \"{}\"", .0.fg(Color::Red), .1.fg(Color::Green))]
     TypeMismatch(Type<S>, Type<()>),
-    #[error("Given term \"{0}\" does not match inferred term \"{1}\"")]
+    #[error("Given term \"{}\" does not match inferred term \"{}\"", .0.fg(Color::Red), .1.fg(Color::Green))]
     TermMismatch(Term<S>, Term<()>),
-    #[error("Mismatch between inferred terms \"{1}\" and \"{2}\" in labelling \"{0}\"")]
+    #[error("Mismatch between inferred terms \"{}\" and \"{}\" in labelling \"{}\"", .1.fg(Color::Magenta), .2.fg(Color::Blue), .0.fg(Color::Red))]
     LabelMismatch(Label<S>, Term<()>, Term<()>, S),
-    #[error("Dimension mismatch in labeling \"{0}\"")]
+    #[error("Dimension mismatch in labeling \"{}\"", .0.fg(Color::Red))]
     DimensionMismatch(Label<S>, S),
-    #[error("Substitution \"{0}\" cannot be coerced to labelling")]
+    #[error("Substitution \"{}\" cannot be coerced to labelling", .0.fg(Color::Red))]
     SubToLabel(Args<S>, S),
-    #[error("Cannot convert labelling \"{0}\" to substitution")]
+    #[error("Cannot convert labelling \"{}\" to substitution", .0.fg(Color::Red))]
     LabelToSub(Label<S>, S),
-    #[error("Locally maximal argument missing from labelling ")]
+    #[error("Locally maximal argument missing from labelling \"{}\"", .0.fg(Color::Red))]
     LocallyMaxMissing(Label<S>, S),
 }
 
@@ -125,90 +125,122 @@ impl TypeCheckError<Range<usize>> {
             .with_message(self.to_string());
 
         match self {
-            TypeCheckError::UnknownTopLevel(_, sp) => report
-                .add_label(ariadne::Label::new((src, sp)).with_message("Unknown top level symbol")),
-            TypeCheckError::UnknownLocal(_, sp) => report
-                .add_label(ariadne::Label::new((src, sp)).with_message("Unknown local variable")),
+            TypeCheckError::UnknownTopLevel(_, sp) => report.add_label(
+                ariadne::Label::new((src, sp))
+                    .with_message("Unknown symbol")
+                    .with_color(Color::Red),
+            ),
+            TypeCheckError::UnknownLocal(_, sp) => report.add_label(
+                ariadne::Label::new((src, sp))
+                    .with_message("Unknown variable")
+                    .with_color(Color::Red),
+            ),
             TypeCheckError::Fullness(ty) => report.add_label(
-                ariadne::Label::new((src, ty.span().clone())).with_message("Type is not full"),
+                ariadne::Label::new((src, ty.span().clone()))
+                    .with_message("Type is not full")
+                    .with_color(Color::Red),
             ),
             TypeCheckError::CannotInferCtx(tm) => report.add_label(
                 ariadne::Label::new((src, tm.span().clone()))
-                    .with_message("Context cannot be inferred"),
+                    .with_message("Context cannot be inferred")
+                    .with_color(Color::Red),
             ),
             TypeCheckError::CannotCheckCtx(tm) => report.add_label(
                 ariadne::Label::new((src, tm.span().clone()))
-                    .with_message("Context cannot be checked"),
+                    .with_message("Context cannot be checked")
+                    .with_color(Color::Red),
             ),
             TypeCheckError::CannotCheck(ty) => report.add_label(
-                ariadne::Label::new((src, ty.span().clone())).with_message("Type is not checkable"),
+                ariadne::Label::new((src, ty.span().clone()))
+                    .with_message("Type is not checkable")
+                    .with_color(Color::Red),
             ),
             TypeCheckError::InferredTypesNotEqual(tm1, ty1, tm2, ty2, _) => {
                 report.add_label(
                     ariadne::Label::new((src, tm2.span().clone()))
-                        .with_message(format!("Has type {ty2}"))
-                        .with_order(0),
+                        .with_message(format!("Has type {}", ty2.fg(Color::Magenta)))
+                        .with_order(0)
+                        .with_color(Color::Magenta),
                 );
                 report.add_label(
                     ariadne::Label::new((src, tm1.span().clone()))
-                        .with_message(format!("Has type {ty1}"))
-                        .with_order(1),
+                        .with_message(format!("Has type {}", ty1.fg(Color::Blue)))
+                        .with_order(1)
+                        .with_color(Color::Blue),
                 );
                 report.set_note("Terms in an arrow type should have equal type");
             }
             TypeCheckError::InferredTypeWrong(tm, ity, gty) => {
                 report.add_label(
                     ariadne::Label::new((src, tm.span().clone()))
-                        .with_message(format!("Term has inferred type {ity}")),
+                        .with_message(format!("Term has inferred type {}", ity.fg(Color::Red)))
+                        .with_color(Color::Red),
                 );
                 report.add_label(
                     ariadne::Label::new((src, gty.span().clone()))
-                        .with_message(format!("Term should have type {gty}")),
+                        .with_message(format!("Term should have type {}", gty.fg(Color::Green)))
+                        .with_color(Color::Green),
                 );
             }
             TypeCheckError::InferredTypeWrongCalc(tm, ity, gty) => {
-                report.add_label(ariadne::Label::new((src, tm.span().clone())).with_message(
-                    format!("Term has inferref type {ity} but should have type {gty}"),
-                ));
+                report.add_label(
+                    ariadne::Label::new((src, tm.span().clone()))
+                        .with_message(format!(
+                            "Term has inferred type {} but should have type {}",
+                            ity.fg(Color::Red),
+                            gty.fg(Color::Green)
+                        ))
+                        .with_color(Color::Red),
+                );
             }
             TypeCheckError::TypeMismatch(ty, _) => {
                 report.add_label(
-                    ariadne::Label::new((src, ty.span().clone())).with_message("Given type"),
+                    ariadne::Label::new((src, ty.span().clone()))
+                        .with_message("Given type")
+                        .with_color(Color::Red),
                 );
             }
             TypeCheckError::TermMismatch(tm, _) => {
                 report.add_label(
-                    ariadne::Label::new((src, tm.span().clone())).with_message("Given term"),
+                    ariadne::Label::new((src, tm.span().clone()))
+                        .with_message("Given term")
+                        .with_color(Color::Red),
                 );
             }
             TypeCheckError::LabelMismatch(_, _, _, sp) => {
+                println!("{sp:?}");
                 report.add_label(
                     ariadne::Label::new((src, sp.clone()))
-                        .with_message("Term mismatch in labelling"),
+                        .with_message("Term mismatch in labelling")
+                        .with_color(Color::Red),
                 );
             }
             TypeCheckError::DimensionMismatch(_, sp) => {
                 report.add_label(
                     ariadne::Label::new((src, sp.clone()))
-                        .with_message("Dimension mismatch in labelling"),
+                        .with_message("Dimension mismatch in labelling")
+                        .with_color(Color::Red),
                 );
             }
             TypeCheckError::SubToLabel(_, sp) => {
                 report.add_label(
                     ariadne::Label::new((src, sp.clone()))
-                        .with_message("Substitution cannot be coerced"),
+                        .with_message("Substitution cannot be coerced")
+                        .with_color(Color::Red),
                 );
             }
             TypeCheckError::LabelToSub(_, sp) => {
                 report.add_label(
                     ariadne::Label::new((src, sp.clone()))
-                        .with_message("Label found when substitution expected"),
+                        .with_message("Label found when substitution expected")
+                        .with_color(Color::Red),
                 );
             }
             TypeCheckError::LocallyMaxMissing(_, sp) => {
                 report.add_label(
                     ariadne::Label::new((src, sp.clone()))
-                        .with_message("Locally maximal argument missing"),
+                        .with_message("Locally maximal argument missing")
+                        .with_color(Color::Red),
                 );
             }
         }
