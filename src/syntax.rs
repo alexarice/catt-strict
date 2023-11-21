@@ -1,10 +1,10 @@
 use crate::common::{Name, NoDispOption, Spanned, Tree};
 use chumsky::{prelude::*, text::keyword};
 use itertools::Itertools;
-use pretty::{RcDoc, Doc};
+use pretty::{Doc, RcDoc};
 use std::{
     fmt::Display,
-    ops::{Range, RangeInclusive, Deref},
+    ops::{Deref, Range, RangeInclusive},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -415,21 +415,19 @@ impl<T: ToDoc> ToDoc for Tree<T> {
         let mut iter = self.elements.iter();
         let mut inner = RcDoc::nil();
 
-	if let Some(e) = iter.next() {
-	    let d = e.to_doc();
-	    if ! matches!(d.deref(), Doc::Nil) {
-		inner = inner.append(RcDoc::line_()).append(d);
-	    }
-	}
+        if let Some(e) = iter.next() {
+            let d = e.to_doc();
+            if !matches!(d.deref(), Doc::Nil) {
+                inner = inner.append(RcDoc::line_()).append(d);
+            }
+        }
 
         for (e, t) in iter.zip(&self.branches) {
-            inner = inner
-                .append(RcDoc::line_())
-                .append(t.to_doc());
-	    let d = e.to_doc();
-	    if ! matches!(d.deref(), Doc::Nil) {
-		inner = inner.append(RcDoc::line_()).append(d);
-	    }
+            inner = inner.append(RcDoc::line_()).append(t.to_doc());
+            let d = e.to_doc();
+            if !matches!(d.deref(), Doc::Nil) {
+                inner = inner.append(RcDoc::line_()).append(d);
+            }
         }
 
         RcDoc::group(

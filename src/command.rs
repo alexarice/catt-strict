@@ -53,29 +53,25 @@ impl Command {
             Command::LetHead(nm, h) => {
                 println!("{} {nm}", "Inferring".fg(Color::Green));
                 let x = h.infer(env)?;
+                println!("{}", x.1.to_expr(Some(&x.0), false).to_doc().pretty(80));
                 println!(
-                    "  {}",
-                    x.1.to_expr(Some(&x.0), false).to_doc().nest(2).pretty(80)
-                );
-                println!(
-                    "has type {}",
+                    "{} {}",
+                    "has type".fg(Color::Blue),
                     x.2.to_expr(Some(&x.0), false).to_doc().nest(9).pretty(80)
                 );
                 env.top_level.insert(nm, x);
             }
             Command::LetCtx(nm, ctx, tm) => {
-                println!("Checking {nm}");
+                println!("{} {nm}", "Checking".fg(Color::Green));
                 let local = ctx.check(env)?;
                 let (tmt, tyt) = tm.check(env, &local)?;
                 println!(
-                    "  {}",
-                    tmt.to_expr(Some(&local.ctx), false)
-                        .to_doc()
-                        .nest(2)
-                        .pretty(80)
+                    "{}",
+                    tmt.to_expr(Some(&local.ctx), false).to_doc().pretty(80)
                 );
                 println!(
-                    "has type {}",
+                    "{} {}",
+                    "has type".fg(Color::Blue),
                     tyt.to_expr(Some(&local.ctx), false)
                         .to_doc()
                         .nest(9)
@@ -85,7 +81,11 @@ impl Command {
                 env.top_level.insert(nm, (local.ctx, tmt, tyt));
             }
             Command::LetWT(nm, ctx, ty, tm) => {
-                println!("{} {nm} has type {ty}", "Checking".fg(Color::Green));
+                println!(
+                    "{} {nm} {} {ty}",
+                    "Checking".fg(Color::Green),
+                    "has type".fg(Color::Blue)
+                );
                 let local = ctx.check(env)?;
                 let (tmt, tyt) = tm.check(env, &local)?;
                 ty.check(
@@ -94,7 +94,8 @@ impl Command {
                     &tyt.eval(&SemCtx::id(local.ctx.positions()), env),
                 )?;
                 println!(
-                    "Checked {}",
+                    "{} {}",
+                    "Checked".fg(Color::Blue),
                     tmt.to_expr(Some(&local.ctx), false)
                         .to_doc()
                         .nest(8)
@@ -111,7 +112,7 @@ impl Command {
                 println!(
                     "{}",
                     RcDoc::group(
-                        RcDoc::text("Normal form:").append(
+                        RcDoc::text("Normal form:".fg(Color::Blue).to_string()).append(
                             RcDoc::line()
                                 .append(quoted.to_expr(Some(&local.ctx), false).to_doc())
                                 .nest(2)
