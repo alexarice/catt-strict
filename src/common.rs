@@ -2,8 +2,12 @@ use std::fmt::Display;
 
 use derivative::Derivative;
 use itertools::Itertools;
+use pretty::RcDoc;
 
-use crate::term::{TermT, TypeT};
+use crate::{
+    syntax::ToDoc,
+    term::{TermT, TypeT},
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Name(pub String);
@@ -11,6 +15,12 @@ pub struct Name(pub String);
 impl<'a> From<&'a str> for Name {
     fn from(value: &'a str) -> Self {
         Name(value.to_string())
+    }
+}
+
+impl ToDoc for Name {
+    fn to_doc(&self) -> pretty::RcDoc<'_> {
+        RcDoc::text(&self.0)
     }
 }
 
@@ -23,6 +33,15 @@ impl Display for Name {
 #[derive(Clone, Debug, Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct NoDispOption<T>(pub Option<T>);
+
+impl<T: ToDoc> ToDoc for NoDispOption<T> {
+    fn to_doc(&self) -> RcDoc<'_> {
+        match &self.0 {
+            Some(x) => x.to_doc(),
+            None => RcDoc::nil(),
+        }
+    }
+}
 
 impl<T: Display> Display for NoDispOption<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -43,6 +62,12 @@ impl<T> Eq for NoDispOption<T> {}
 
 #[derive(Clone, Debug)]
 pub struct Spanned<T, S>(pub T, pub S);
+
+impl<T: ToDoc, S> ToDoc for Spanned<T, S> {
+    fn to_doc(&self) -> RcDoc<'_> {
+        self.0.to_doc()
+    }
+}
 
 impl<T: Display, S> Display for Spanned<T, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

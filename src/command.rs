@@ -5,7 +5,7 @@ use chumsky::{prelude::Simple, primitive::just, text::TextParser, Parser};
 use crate::{
     common::Name,
     eval::SemCtx,
-    syntax::{ctx, ident, term, ty, Ctx, Term, Type},
+    syntax::{ctx, ident, term, ty, Ctx, Term, ToDoc, Type},
     typecheck::{Environment, TypeCheckError},
 };
 
@@ -51,16 +51,28 @@ impl Command {
             Command::LetHead(nm, h) => {
                 println!("Inferring {nm}");
                 let x = h.infer(env)?;
-                println!("{}", x.1.to_expr(Some(&x.0), false));
-                println!("  has type {}", x.2.to_expr(Some(&x.0), false));
+                println!("{}", x.1.to_expr(Some(&x.0), false).to_doc().pretty(80));
+                println!(
+                    "  has type {}",
+                    x.2.to_expr(Some(&x.0), false).to_doc().nest(11).pretty(80)
+                );
                 env.top_level.insert(nm, x);
             }
             Command::LetCtx(nm, ctx, tm) => {
                 println!("Checking {nm}");
                 let local = ctx.check(env)?;
                 let (tmt, tyt) = tm.check(env, &local)?;
-                println!("{}", tmt.to_expr(Some(&local.ctx), false));
-                println!("  has type {}", tyt.to_expr(Some(&local.ctx), false));
+                println!(
+                    "{}",
+                    tmt.to_expr(Some(&local.ctx), false).to_doc().pretty(80)
+                );
+                println!(
+                    "  has type {}",
+                    tyt.to_expr(Some(&local.ctx), false)
+                        .to_doc()
+                        .nest(11)
+                        .pretty(80)
+                );
 
                 env.top_level.insert(nm, (local.ctx, tmt, tyt));
             }
@@ -73,7 +85,10 @@ impl Command {
                     &local,
                     &tyt.eval(&SemCtx::id(local.ctx.positions()), env),
                 )?;
-                println!("Checked {}", tmt.to_expr(Some(&local.ctx), false));
+                println!(
+                    "Checked {}",
+                    tmt.to_expr(Some(&local.ctx), false).to_doc().pretty(80)
+                );
                 env.top_level.insert(nm, (local.ctx, tmt, tyt));
             }
             Command::Normalise(ctx, tm) => {
@@ -82,7 +97,14 @@ impl Command {
                 let (tmt, _) = tm.check(env, &local)?;
                 let tmn = tmt.eval(&SemCtx::id(local.ctx.positions()), env);
                 let quoted = tmn.quote();
-                println!("NF: {}", quoted.to_expr(Some(&local.ctx), false));
+                println!(
+                    "NF: {}",
+                    quoted
+                        .to_expr(Some(&local.ctx), false)
+                        .to_doc()
+                        .nest(4)
+                        .pretty(80)
+                );
             }
         }
         Ok(())

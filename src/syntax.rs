@@ -1,6 +1,7 @@
 use crate::common::{Name, NoDispOption, Spanned, Tree};
 use chumsky::{prelude::*, text::keyword};
 use itertools::Itertools;
+use pretty::RcDoc;
 use std::{
     fmt::Display,
     ops::{Range, RangeInclusive},
@@ -219,6 +220,30 @@ pub fn ctx() -> impl Parser<char, Ctx<Range<usize>>, Error = Simple<char>> {
     ctx_internal(term())
 }
 
+pub trait ToDoc {
+    fn to_doc(&self) -> RcDoc<'_>;
+}
+
+impl<S> ToDoc for ArgsWithType<S> {
+    fn to_doc(&self) -> RcDoc<'_> {
+        let ty_part = if let Some(ty) = &self.ty {
+            RcDoc::line_()
+                .append(RcDoc::group(
+                    RcDoc::text("<")
+                        .append(RcDoc::line_().append(ty.to_doc()))
+                        .nest(2)
+                        .append(RcDoc::line_())
+                        .append(">"),
+                ))
+                .nest(2)
+        } else {
+            RcDoc::nil()
+        };
+
+        RcDoc::group(self.args.to_doc().append(ty_part))
+    }
+}
+
 impl<S> Display for ArgsWithType<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.args.fmt(f)?;
@@ -226,6 +251,37 @@ impl<S> Display for ArgsWithType<S> {
             write!(f, "<{}>", typ)?;
         }
         Ok(())
+    }
+}
+
+impl<S> ToDoc for Term<S> {
+    fn to_doc(&self) -> RcDoc<'_> {
+        match self {
+            Term::App(t, a, _) => {
+                RcDoc::group(t.to_doc().append(RcDoc::line_().append(a.to_doc()).nest(2)))
+            }
+            Term::Susp(t, _) => RcDoc::group(
+                RcDoc::text("‼(")
+                    .append(RcDoc::line_().append(t.to_doc()).nest(2))
+                    .append(RcDoc::line_())
+                    .append(")"),
+            ),
+            Term::Var(t, _) => t.to_doc(),
+            Term::Coh(tr, ty, _) => RcDoc::group(
+                RcDoc::text("coh [").append(tr.to_doc()).append(
+                    RcDoc::line()
+                        .append(": ")
+                        .append(ty.to_doc().nest(2))
+                        .append(RcDoc::line_().append("]"))
+                        .nest(4),
+                ),
+            ),
+            Term::Include(tm, rng, _) => RcDoc::group(
+                RcDoc::text(format!("inc<{}-{}>(", rng.start(), rng.end()))
+                    .append(RcDoc::line_().append(tm.to_doc()).nest(2))
+                    .append(RcDoc::line_().append(")")),
+            ),
+        }
     }
 }
 
@@ -253,6 +309,25 @@ impl<S> Display for Term<S> {
     }
 }
 
+impl<S> ToDoc for Args<S> {
+    fn to_doc(&self) -> RcDoc<'_> {
+        match self {
+            Args::Sub(Spanned(args, _)) => RcDoc::group(
+                RcDoc::text("<")
+                    .append(
+                        RcDoc::intersperse(
+                            args.iter().map(ToDoc::to_doc),
+                            RcDoc::text(",").append(RcDoc::line()),
+                        )
+                        .nest(1),
+                    )
+                    .append(">"),
+            ),
+            Args::Label(l) => l.to_doc(),
+        }
+    }
+}
+
 impl<S> Display for Args<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -260,6 +335,43 @@ impl<S> Display for Args<S> {
                 write!(f, "<{}>", args.iter().map(ToString::to_string).join(","))
             }
             Args::Label(Spanned(l, _)) => l.fmt(f),
+        }
+    }
+}
+
+impl<S> ToDoc for Type<S> {
+    fn to_doc(&self) -> RcDoc<'_> {
+        match self {
+            Type::Base(_) => RcDoc::text("*"),
+            Type::Arr(s, a, t, _) => {
+                let start = if let Some(x) = a {
+                    x.to_doc().append(RcDoc::line()).append("| ")
+                } else {
+                    RcDoc::nil()
+                };
+
+                let end = RcDoc::group(
+                    s.to_doc()
+                        .append(RcDoc::line())
+                        .append("->")
+                        .append(RcDoc::line())
+                        .append(t.to_doc()),
+                );
+
+                RcDoc::group(start.append(end))
+            }
+            Type::App(t, a, _) => RcDoc::group(
+                RcDoc::text("(")
+                    .append(t.to_doc())
+                    .append(")")
+                    .append(RcDoc::line_().append(a.to_doc()).nest(2)),
+            ),
+            Type::Susp(t, _) => RcDoc::group(
+                RcDoc::text("‼(")
+                    .append(RcDoc::line_().append(t.to_doc()).nest(2))
+                    .append(RcDoc::line_())
+                    .append(")"),
+            ),
         }
     }
 }
@@ -295,6 +407,28 @@ impl<S> Display for Ctx<S> {
             }
         }
         Ok(())
+    }
+}
+
+impl<T: ToDoc> ToDoc for Tree<T> {
+    fn to_doc(&self) -> RcDoc<'_> {
+        let mut iter = self.elements.iter();
+        let mut inner = iter.next().unwrap().to_doc();
+
+        for (e, t) in iter.zip(&self.branches) {
+            inner = inner
+                .append(RcDoc::line_())
+                .append(t.to_doc())
+                .append(RcDoc::line_())
+                .append(e.to_doc());
+        }
+
+        RcDoc::group(
+            RcDoc::text("(")
+                .append(RcDoc::line_().append(inner).nest(2))
+                .append(RcDoc::line_())
+                .append(")"),
+        )
     }
 }
 
