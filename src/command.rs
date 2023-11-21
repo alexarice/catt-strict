@@ -1,6 +1,8 @@
 use std::ops::Range;
 
+use ariadne::{Color, Fmt};
 use chumsky::{prelude::Simple, primitive::just, text::TextParser, Parser};
+use pretty::RcDoc;
 
 use crate::{
     common::Name,
@@ -49,12 +51,15 @@ impl Command {
         println!("----------------------------------------");
         match self {
             Command::LetHead(nm, h) => {
-                println!("Inferring {nm}");
+                println!("{} {nm}", "Inferring".fg(Color::Green));
                 let x = h.infer(env)?;
-                println!("{}", x.1.to_expr(Some(&x.0), false).to_doc().pretty(80));
                 println!(
-                    "  has type {}",
-                    x.2.to_expr(Some(&x.0), false).to_doc().nest(11).pretty(80)
+                    "  {}",
+                    x.1.to_expr(Some(&x.0), false).to_doc().nest(2).pretty(80)
+                );
+                println!(
+                    "has type {}",
+                    x.2.to_expr(Some(&x.0), false).to_doc().nest(9).pretty(80)
                 );
                 env.top_level.insert(nm, x);
             }
@@ -63,21 +68,24 @@ impl Command {
                 let local = ctx.check(env)?;
                 let (tmt, tyt) = tm.check(env, &local)?;
                 println!(
-                    "{}",
-                    tmt.to_expr(Some(&local.ctx), false).to_doc().pretty(80)
+                    "  {}",
+                    tmt.to_expr(Some(&local.ctx), false)
+                        .to_doc()
+                        .nest(2)
+                        .pretty(80)
                 );
                 println!(
-                    "  has type {}",
+                    "has type {}",
                     tyt.to_expr(Some(&local.ctx), false)
                         .to_doc()
-                        .nest(11)
+                        .nest(9)
                         .pretty(80)
                 );
 
                 env.top_level.insert(nm, (local.ctx, tmt, tyt));
             }
             Command::LetWT(nm, ctx, ty, tm) => {
-                println!("Checking {nm} has type {ty}");
+                println!("{} {nm} has type {ty}", "Checking".fg(Color::Green));
                 let local = ctx.check(env)?;
                 let (tmt, tyt) = tm.check(env, &local)?;
                 ty.check(
@@ -87,23 +95,29 @@ impl Command {
                 )?;
                 println!(
                     "Checked {}",
-                    tmt.to_expr(Some(&local.ctx), false).to_doc().pretty(80)
+                    tmt.to_expr(Some(&local.ctx), false)
+                        .to_doc()
+                        .nest(8)
+                        .pretty(80)
                 );
                 env.top_level.insert(nm, (local.ctx, tmt, tyt));
             }
             Command::Normalise(ctx, tm) => {
-                println!("Normalising {tm}");
+                println!("{} {tm}", "Normalising".fg(Color::Green));
                 let local = ctx.check(env)?;
                 let (tmt, _) = tm.check(env, &local)?;
                 let tmn = tmt.eval(&SemCtx::id(local.ctx.positions()), env);
                 let quoted = tmn.quote();
                 println!(
-                    "NF: {}",
-                    quoted
-                        .to_expr(Some(&local.ctx), false)
-                        .to_doc()
-                        .nest(4)
-                        .pretty(80)
+                    "{}",
+                    RcDoc::group(
+                        RcDoc::text("Normal form:").append(
+                            RcDoc::line()
+                                .append(quoted.to_expr(Some(&local.ctx), false).to_doc())
+                                .nest(2)
+                        )
+                    )
+                    .pretty(80)
                 );
             }
         }

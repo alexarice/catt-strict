@@ -1,10 +1,10 @@
 use crate::common::{Name, NoDispOption, Spanned, Tree};
 use chumsky::{prelude::*, text::keyword};
 use itertools::Itertools;
-use pretty::RcDoc;
+use pretty::{RcDoc, Doc};
 use std::{
     fmt::Display,
-    ops::{Range, RangeInclusive},
+    ops::{Range, RangeInclusive, Deref},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -268,7 +268,7 @@ impl<S> ToDoc for Term<S> {
             ),
             Term::Var(t, _) => t.to_doc(),
             Term::Coh(tr, ty, _) => RcDoc::group(
-                RcDoc::text("coh [").append(tr.to_doc()).append(
+                RcDoc::text("coh [").append(tr.to_doc().nest(5)).append(
                     RcDoc::line()
                         .append(": ")
                         .append(ty.to_doc().nest(2))
@@ -413,19 +413,28 @@ impl<S> Display for Ctx<S> {
 impl<T: ToDoc> ToDoc for Tree<T> {
     fn to_doc(&self) -> RcDoc<'_> {
         let mut iter = self.elements.iter();
-        let mut inner = iter.next().unwrap().to_doc();
+        let mut inner = RcDoc::nil();
+
+	if let Some(e) = iter.next() {
+	    let d = e.to_doc();
+	    if ! matches!(d.deref(), Doc::Nil) {
+		inner = inner.append(RcDoc::line_()).append(d);
+	    }
+	}
 
         for (e, t) in iter.zip(&self.branches) {
             inner = inner
                 .append(RcDoc::line_())
-                .append(t.to_doc())
-                .append(RcDoc::line_())
-                .append(e.to_doc());
+                .append(t.to_doc());
+	    let d = e.to_doc();
+	    if ! matches!(d.deref(), Doc::Nil) {
+		inner = inner.append(RcDoc::line_()).append(d);
+	    }
         }
 
         RcDoc::group(
             RcDoc::text("(")
-                .append(RcDoc::line_().append(inner).nest(2))
+                .append(inner.nest(1))
                 .append(RcDoc::line_())
                 .append(")"),
         )
