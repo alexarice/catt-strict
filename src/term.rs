@@ -16,6 +16,7 @@ pub enum TermT {
     Susp(Box<TermT>),
     Coh(Tree<NoDispOption<Name>>, Box<TypeT>),
     Include(Box<TermT>, RangeInclusive<usize>),
+    UComp(Tree<NoDispOption<Name>>, Box<TypeT>),
 }
 
 pub type SubT = Vec<TermT>;
@@ -91,6 +92,7 @@ impl TermT {
             TermT::Include(tm, rng) => {
                 Term::Include(Box::new(tm.to_expr(ctx, with_ict)), rng.clone(), ())
             }
+            TermT::UComp(tr, _) => Term::UComp(tr.clone(), ()),
         }
     }
 }
@@ -165,6 +167,46 @@ impl CtxT {
                 new_ctx.extend(ctx);
                 CtxT::Ctx(new_ctx)
             }
+        }
+    }
+}
+
+impl Tree<NoDispOption<Name>> {
+    pub fn unbiased_term(self, d: usize) -> TermT {
+        if self.is_disc() {
+            TermT::Var(Pos::Path(
+                self.get_maximal_paths().into_iter().next().unwrap(),
+            ))
+        } else {
+            let ty = self.unbiased_type(d);
+            TermT::UComp(self, Box::new(ty))
+        }
+    }
+
+    pub fn unbiased_type(&self, d: usize) -> TypeT {
+        if d == 0 {
+            TypeT::Base
+        } else {
+            let ptree = self.path_tree().map(&|p| TermT::Var(Pos::Path(p)));
+            let src = self.bdry(d - 1, false);
+            let tgt = self.bdry(d - 1, true);
+            TypeT::Arr(
+                TermT::App(
+                    Box::new(src.unbiased_term(d - 1)),
+                    ArgsWithTypeT {
+                        args: ArgsT::Label(ptree.bdry(d - 1, false)),
+                        ty: Box::new(TypeT::Base),
+                    },
+                ),
+                Box::new(self.unbiased_type(d - 1)),
+                TermT::App(
+                    Box::new(tgt.unbiased_term(d - 1)),
+                    ArgsWithTypeT {
+                        args: ArgsT::Label(ptree.bdry(d - 1, true)),
+                        ty: Box::new(TypeT::Base),
+                    },
+                ),
+            )
         }
     }
 }

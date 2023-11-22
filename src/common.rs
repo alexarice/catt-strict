@@ -280,6 +280,61 @@ impl<T> Tree<T> {
             self.branches.into_iter().next().unwrap().unwrap_disc()
         }
     }
+
+    pub fn bdry(&self, d: usize, tgt: bool) -> Tree<T>
+    where
+        T: Clone,
+    {
+        if d == 0 {
+            if tgt {
+                Tree::singleton(self.elements.last().unwrap().clone())
+            } else {
+                Tree::singleton(self.elements.first().unwrap().clone())
+            }
+        } else {
+            Tree {
+                elements: self.elements.clone(),
+                branches: self.branches.iter().map(|br| br.bdry(d - 1, tgt)).collect(),
+            }
+        }
+    }
+}
+
+impl<T: Default> Tree<T> {
+    pub fn disc(n: usize) -> Self {
+        if n == 0 {
+            Tree::singleton(T::default())
+        } else {
+            Tree {
+                elements: vec![T::default(), T::default()],
+                branches: vec![Self::disc(n - 1)],
+            }
+        }
+    }
+
+    pub fn whisk_right(&mut self, codim: usize, dim: usize) -> Option<()> {
+        if codim == 0 {
+            if dim < 1 {
+                return None;
+            }
+            self.branches.push(Tree::disc(dim - 1));
+            self.elements.push(T::default());
+        } else {
+            self.branches.last_mut()?.whisk_right(codim - 1, dim - 1)?;
+        }
+        Some(())
+    }
+
+    pub fn from_usizes(v: &[usize]) -> Option<Self> {
+        let mut tree = Self::disc(*v.get(0)?);
+
+        for c in &v[1..].into_iter().chunks(2) {
+            let (codim, dim) = c.collect_tuple()?;
+            tree.whisk_right(*codim, *dim)?;
+        }
+
+        Some(tree)
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]

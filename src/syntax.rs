@@ -19,6 +19,8 @@ pub enum Term<S> {
     Var(Name, S),
     Coh(Tree<NoDispOption<Name>>, Box<Type<S>>, S),
     Include(Box<Term<S>>, RangeInclusive<usize>, S),
+    UComp(Tree<NoDispOption<Name>>, S),
+    UCompNum(Vec<usize>, S, S),
 }
 
 pub type Sub<S> = Vec<Term<S>>;
@@ -51,7 +53,9 @@ impl<S> Term<S> {
             | Term::Susp(_, s)
             | Term::Var(_, s)
             | Term::Coh(_, _, s)
-            | Term::Include(_, _, s) => s,
+            | Term::Include(_, _, s)
+            | Term::UComp(_, s)
+            | Term::UCompNum(_, _, s) => s,
         }
     }
 }
@@ -86,7 +90,7 @@ where
 
 pub fn ident() -> impl Parser<char, Name, Error = Simple<char>> + Clone {
     text::ident().try_map(|x, span| {
-        if x == "coh" || x == "let" || x == "_" {
+        if x == "coh" || x == "ucomp" || x == "let" || x == "_" {
             Err(Simple::custom(
                 span,
                 format!("Identifier cannot be \"{x}\""),
@@ -102,14 +106,47 @@ where
     P: Parser<char, Term<Range<usize>>, Error = Simple<char>> + Clone + 'static,
 {
     keyword("coh")
+        .ignore_then(text::whitespace())
         .ignore_then(
             tree(ident().padded().or_not().map(NoDispOption))
                 .padded()
                 .then(just(":").ignore_then(ty_internal(term.clone()).padded()))
-                .delimited_by(just("["), just("]"))
-                .padded()
-                .map_with_span(|(ctx, ty), sp| Term::Coh(ctx, Box::new(ty), sp)),
+                .delimited_by(just("["), just("]")),
         )
+        .map_with_span(|(ctx, ty), sp| Term::Coh(ctx, Box::new(ty), sp))
+        .or(keyword("ucomp")
+            .ignore_then(text::whitespace())
+            .ignore_then(
+                text::int(10)
+                    .map(|x: String| x.parse::<usize>().unwrap())
+                    .separated_by(text::whitespace().at_least(1))
+                    .at_least(1)
+                    .padded()
+                    .collect()
+                    .map_with_span(|v, inner| (v, inner)),
+            )
+            .map_with_span(|(v, inner), outer| Term::UCompNum(v, inner, outer)))
+        .or(keyword("ucomp")
+            .ignore_then(text::whitespace())
+            .ignore_then(
+                text::int(10)
+                    .map(|x: String| x.parse::<usize>().unwrap())
+                    .separated_by(text::whitespace().at_least(1))
+                    .at_least(1)
+                    .padded()
+                    .delimited_by(just("["), just("]"))
+                    .collect()
+                    .map_with_span(|v, inner| (v, inner)),
+            )
+            .map_with_span(|(v, inner), outer| Term::UCompNum(v, inner, outer)))
+        .or(keyword("ucomp")
+            .ignore_then(text::whitespace())
+            .ignore_then(
+                tree(ident().padded().or_not().map(NoDispOption))
+                    .padded()
+                    .delimited_by(just("["), just("]")),
+            )
+            .map_with_span(Term::UComp))
         .or(ident().map_with_span(Term::Var))
         .or(just("‼")
             .ignore_then(term.padded().delimited_by(just("("), just(")")))
@@ -253,11 +290,11 @@ impl<S> ToDoc for Term<S> {
             ),
             Term::Var(t, _) => t.to_doc(),
             Term::Coh(tr, ty, _) => RcDoc::group(
-                RcDoc::text("coh [").append(tr.to_doc().nest(5)).append(
+                RcDoc::text("coh [ ").append(tr.to_doc().nest(6)).append(
                     RcDoc::line()
                         .append(": ")
                         .append(ty.to_doc().nest(2))
-                        .append(RcDoc::line_().append("]"))
+                        .append(RcDoc::line().append("]"))
                         .nest(4),
                 ),
             ),
@@ -265,6 +302,22 @@ impl<S> ToDoc for Term<S> {
                 RcDoc::text(format!("inc<{}-{}>(", rng.start(), rng.end()))
                     .append(RcDoc::line_().append(tm.to_doc()).nest(2))
                     .append(RcDoc::line_().append(")")),
+            ),
+            Term::UComp(tr, _) => RcDoc::group(
+                RcDoc::text("ucomp [ ")
+                    .append(tr.to_doc().nest(8))
+                    .append(" ]"),
+            ),
+            Term::UCompNum(v, _, _) => RcDoc::group(
+                RcDoc::text("ucomp [ ")
+                    .append(
+                        RcDoc::intersperse(
+                            v.iter().map(|x| RcDoc::text(x.to_string())),
+                            RcDoc::line(),
+                        )
+                        .nest(8),
+                    )
+                    .append(" ]"),
             ),
         }
     }

@@ -27,3 +27,5 @@ let swap = coh[((f(a)g)(i(b)k)) : comp<whisk_r<a,i>, whisk_l<g,b>> -> comp<whisk
 let eh (x : *) (a : id<x> -> id<x>) (b : id<x> -> id<x>) : comp<a,b> -> comp<b,a> = swap<a,b>
 
 normalise (x(f)y(g)z(h)w) | comp<f,comp<g,h>>
+
+let test2 = ucomp [ 1 0 1 ]

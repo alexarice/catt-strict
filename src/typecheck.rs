@@ -3,6 +3,7 @@ use std::hash::Hash;
 use std::{collections::HashMap, ops::Range};
 
 use ariadne::{Color, Fmt, Report, ReportKind, Span};
+use itertools::Itertools;
 use thiserror::Error;
 
 use crate::{
@@ -94,6 +95,8 @@ pub enum TypeCheckError<S> {
     LabelToSub(Label<S>, S),
     #[error("Locally maximal argument missing from labelling \"{}\"", .0.fg(Color::Red))]
     LocallyMaxMissing(Label<S>, S),
+    #[error("Dimension sequence \"{}\" does not correspond to pasting diagram", .0.into_iter().map(ToString::to_string).join(" ").fg(Color::Red))]
+    BadDimSeq(Vec<usize>, S),
 }
 
 impl TypeCheckError<Range<usize>> {
@@ -106,7 +109,8 @@ impl TypeCheckError<Range<usize>> {
             | TypeCheckError::LabelMismatch(_, _, _, s)
             | TypeCheckError::DimensionMismatch(_, s)
             | TypeCheckError::LabelToSub(_, s)
-            | TypeCheckError::LocallyMaxMissing(_, s) => s,
+            | TypeCheckError::LocallyMaxMissing(_, s)
+            | TypeCheckError::BadDimSeq(_, s) => s,
             TypeCheckError::Fullness(ty)
             | TypeCheckError::TypeMismatch(ty, _)
             | TypeCheckError::CannotCheck(ty) => ty.span(),
@@ -243,6 +247,11 @@ impl TypeCheckError<Range<usize>> {
                         .with_color(Color::Red),
                 );
             }
+            TypeCheckError::BadDimSeq(_, sp) => report.add_label(
+                ariadne::Label::new((src, sp.clone()))
+                    .with_message("Dimension sequence malformed")
+                    .with_color(Color::Red),
+            ),
         }
         report.finish()
     }
@@ -276,6 +285,24 @@ impl<S: Clone + Debug> Term<S> {
                     CtxT::Tree(tr.clone()),
                     TermT::Coh(tr.clone(), Box::new(tyt.clone())),
                     tyt,
+                ))
+            }
+            Term::UComp(tr, _) => {
+                let ty = tr.unbiased_type(tr.dim());
+                Ok((
+                    CtxT::Tree(tr.clone()),
+                    TermT::UComp(tr.clone(), Box::new(ty.clone())),
+                    ty,
+                ))
+            }
+            Term::UCompNum(v, inner, _) => {
+                let tr = Tree::from_usizes(v)
+                    .ok_or_else(|| TypeCheckError::BadDimSeq(v.clone(), inner.clone()))?;
+                let ty = tr.unbiased_type(tr.dim());
+                Ok((
+                    CtxT::Tree(tr.clone()),
+                    TermT::UComp(tr, Box::new(ty.clone())),
+                    ty,
                 ))
             }
             t => Err(TypeCheckError::CannotInferCtx(t.clone())),

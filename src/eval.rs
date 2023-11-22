@@ -128,6 +128,107 @@ impl Tree<TermN> {
     }
 }
 
+fn eval_coh(
+    mut tree: Tree<NoDispOption<Name>>,
+    mut tyt: TypeT,
+    ctx: &SemCtx,
+    env: &Environment,
+) -> TermN {
+    let sem_ty = ctx.get_ty();
+    let dim = sem_ty.dim();
+
+    let mut args = tree
+        .path_tree()
+        .map(&|p| ctx.get(&Pos::Path(p)))
+        .unrestrict(sem_ty);
+
+    for _ in 0..dim {
+        tree = tree.susp();
+        tyt = TypeT::Susp(Box::new(tyt));
+    }
+
+    if let Some(insertion) = &env.reduction.insertion {
+        while let Some((p, tr, ty_inner, args_inner)) = args.find_insertion_redex(insertion) {
+            tyt = TypeT::App(
+                Box::new(tyt),
+                ArgsWithTypeT {
+                    args: ArgsT::Label(LabelT::exterior_sub(&tree, p.clone(), &tr, ty_inner)),
+                    ty: Box::new(TypeT::Base),
+                },
+            );
+            tree.insertion(p.clone(), tr);
+            args.insertion(p.clone(), args_inner);
+        }
+    }
+
+    let tyn = tyt.eval(
+        &SemCtx::id(tree.get_paths().into_iter().map(|(x, _)| Pos::Path(x))),
+        env,
+    );
+
+    let (final_ty, susp) = tyn.de_susp(tree.susp_level());
+
+    for _ in 0..susp {
+        tree = tree.branches.remove(0);
+    }
+
+    if env.reduction.disc_rem
+        && tree.is_disc()
+        && tree.dim() == 1
+        && final_ty
+            == TypeN(vec![(
+                TermN::Variable(Pos::Path(Path::here(0))),
+                TermN::Variable(Pos::Path(Path::here(1))),
+            )])
+    {
+        return args.unwrap_disc();
+    }
+
+    if env.reduction.endo_coh
+        && final_ty.0.last().is_some_and(|(s, t)| s == t)
+        && (tree.dim() != 0
+            || final_ty
+                != TypeN(vec![(
+                    TermN::Variable(Pos::Path(Path::here(0))),
+                    TermN::Variable(Pos::Path(Path::here(0))),
+                )]))
+    {
+        let susp = final_ty.dim() - 1;
+        if let TypeT::Arr(s, a, _) = final_ty.quote() {
+            let sem_ctx = SemCtx::new(
+                args.get_paths()
+                    .into_iter()
+                    .map(|(p, tm)| (Pos::Path(p), tm.clone()))
+                    .collect(),
+                TypeN(vec![]),
+            );
+
+            let args = s.eval(&sem_ctx, env).to_args(a.eval(&sem_ctx, env));
+
+            return TermN::Other(
+                HeadN {
+                    tree: Tree::singleton(NoDispOption(Some("x".into()))),
+                    ty: TypeN(vec![(
+                        TermN::Variable(Pos::Path(Path::here(0))),
+                        TermN::Variable(Pos::Path(Path::here(0))),
+                    )]),
+                    susp,
+                },
+                args,
+            );
+        }
+    }
+
+    TermN::Other(
+        HeadN {
+            tree,
+            ty: final_ty,
+            susp,
+        },
+        args,
+    )
+}
+
 impl TermT {
     pub fn eval(&self, ctx: &SemCtx, env: &Environment) -> TermN {
         match self {
@@ -136,112 +237,8 @@ impl TermT {
             TermT::TopLvl(name) => env.top_level.get(name).unwrap().1.eval(ctx, env),
             TermT::Susp(t) => t.eval(&ctx.clone().restrict(), env),
             TermT::Include(t, rng) => t.eval(&ctx.clone().include(rng), env),
-            TermT::Coh(tr, ty) => {
-                let sem_ty = ctx.get_ty();
-                let dim = sem_ty.dim();
-
-                let mut tree = tr.clone();
-
-                let mut tyt = *ty.clone();
-
-                for _ in 0..dim {
-                    tree = tree.susp();
-                    tyt = TypeT::Susp(Box::new(tyt));
-                }
-
-                let mut args = tr
-                    .path_tree()
-                    .map(&|p| ctx.get(&Pos::Path(p)))
-                    .unrestrict(sem_ty);
-
-                if let Some(insertion) = &env.reduction.insertion {
-                    while let Some((p, tr, ty_inner, args_inner)) =
-                        args.find_insertion_redex(insertion)
-                    {
-                        tyt = TypeT::App(
-                            Box::new(tyt),
-                            ArgsWithTypeT {
-                                args: ArgsT::Label(LabelT::exterior_sub(
-                                    &tree,
-                                    p.clone(),
-                                    &tr,
-                                    ty_inner,
-                                )),
-                                ty: Box::new(TypeT::Base),
-                            },
-                        );
-                        tree.insertion(p.clone(), tr);
-                        args.insertion(p.clone(), args_inner);
-                    }
-                }
-
-                let tyn = tyt.eval(
-                    &SemCtx::id(tree.get_paths().into_iter().map(|(x, _)| Pos::Path(x))),
-                    env,
-                );
-
-                let (final_ty, susp) = tyn.de_susp(tree.susp_level());
-
-                for _ in 0..susp {
-                    tree = tree.branches.remove(0);
-                }
-
-                if env.reduction.disc_rem
-                    && tree.is_disc()
-                    && tree.dim() == 1
-                    && final_ty
-                        == TypeN(vec![(
-                            TermN::Variable(Pos::Path(Path::here(0))),
-                            TermN::Variable(Pos::Path(Path::here(1))),
-                        )])
-                {
-                    return args.unwrap_disc();
-                }
-
-                if env.reduction.endo_coh
-                    && final_ty.0.last().is_some_and(|(s, t)| s == t)
-                    && (tree.dim() != 0
-                        || final_ty
-                            != TypeN(vec![(
-                                TermN::Variable(Pos::Path(Path::here(0))),
-                                TermN::Variable(Pos::Path(Path::here(0))),
-                            )]))
-                {
-                    let susp = final_ty.dim() - 1;
-                    if let TypeT::Arr(s, a, _) = final_ty.quote() {
-                        let sem_ctx = SemCtx::new(
-                            args.get_paths()
-                                .into_iter()
-                                .map(|(p, tm)| (Pos::Path(p), tm.clone()))
-                                .collect(),
-                            TypeN(vec![]),
-                        );
-
-                        let args = s.eval(&sem_ctx, env).to_args(a.eval(&sem_ctx, env));
-
-                        return TermN::Other(
-                            HeadN {
-                                tree: Tree::singleton(NoDispOption(Some("x".into()))),
-                                ty: TypeN(vec![(
-                                    TermN::Variable(Pos::Path(Path::here(0))),
-                                    TermN::Variable(Pos::Path(Path::here(0))),
-                                )]),
-                                susp,
-                            },
-                            args,
-                        );
-                    }
-                }
-
-                TermN::Other(
-                    HeadN {
-                        tree,
-                        ty: final_ty,
-                        susp,
-                    },
-                    args,
-                )
-            }
+            TermT::UComp(tr, ty) => eval_coh(tr.clone(), *ty.clone(), ctx, env),
+            TermT::Coh(tr, ty) => eval_coh(tr.clone(), *ty.clone(), ctx, env),
         }
     }
 }
