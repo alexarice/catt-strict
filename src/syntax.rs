@@ -1,6 +1,5 @@
-use crate::common::{Name, NoDispOption, Spanned, Tree};
+use crate::common::{Name, NoDispOption, Spanned, ToDoc, Tree};
 use chumsky::{prelude::*, text::keyword};
-use itertools::Itertools;
 use pretty::{Doc, RcDoc};
 use std::{
     fmt::Display,
@@ -220,10 +219,6 @@ pub fn ctx() -> impl Parser<char, Ctx<Range<usize>>, Error = Simple<char>> {
     ctx_internal(term())
 }
 
-pub trait ToDoc {
-    fn to_doc(&self) -> RcDoc<'_>;
-}
-
 impl<S> ToDoc for ArgsWithType<S> {
     fn to_doc(&self) -> RcDoc<'_> {
         let ty_part = if let Some(ty) = &self.ty {
@@ -241,16 +236,6 @@ impl<S> ToDoc for ArgsWithType<S> {
         };
 
         RcDoc::group(self.args.to_doc().append(ty_part))
-    }
-}
-
-impl<S> Display for ArgsWithType<S> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.args.fmt(f)?;
-        if let Some(typ) = &self.ty {
-            write!(f, "<{}>", typ)?;
-        }
-        Ok(())
     }
 }
 
@@ -287,25 +272,7 @@ impl<S> ToDoc for Term<S> {
 
 impl<S> Display for Term<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Term::App(t, a, _) => {
-                t.fmt(f)?;
-                a.fmt(f)?;
-            }
-            Term::Susp(head, _) => {
-                write!(f, "‼({head})")?;
-            }
-            Term::Var(x, _) => {
-                x.fmt(f)?;
-            }
-            Term::Coh(ctx, ty, _) => {
-                write!(f, "coh [{} : {}]", ctx, ty)?;
-            }
-            Term::Include(tm, rng, _) => {
-                write!(f, "inc<{}-{}>({tm})", rng.start(), rng.end())?;
-            }
-        }
-        Ok(())
+        self.to_doc().render_fmt(usize::MAX, f)
     }
 }
 
@@ -330,12 +297,7 @@ impl<S> ToDoc for Args<S> {
 
 impl<S> Display for Args<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Args::Sub(Spanned(args, _)) => {
-                write!(f, "<{}>", args.iter().map(ToString::to_string).join(","))
-            }
-            Args::Label(Spanned(l, _)) => l.fmt(f),
-        }
+        self.to_doc().render_fmt(usize::MAX, f)
     }
 }
 
@@ -378,19 +340,7 @@ impl<S> ToDoc for Type<S> {
 
 impl<S> Display for Type<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Type::Base(_) => f.write_str("*"),
-            Type::Arr(s, a, t, _) => match a {
-                Some(a) => write!(f, "{a} | {s} -> {t}"),
-                None => write!(f, "{s} -> {t}"),
-            },
-            Type::App(ty, args, _) => {
-                write!(f, "({ty}){args}")
-            }
-            Type::Susp(ty, _) => {
-                write!(f, "‼({ty})")
-            }
-        }
+        self.to_doc().render_fmt(usize::MAX, f)
     }
 }
 

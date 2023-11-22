@@ -4,10 +4,7 @@ use derivative::Derivative;
 use itertools::Itertools;
 use pretty::RcDoc;
 
-use crate::{
-    syntax::ToDoc,
-    term::{TermT, TypeT},
-};
+use crate::term::{TermT, TypeT};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Name(pub String);
@@ -16,6 +13,10 @@ impl<'a> From<&'a str> for Name {
     fn from(value: &'a str) -> Self {
         Name(value.to_string())
     }
+}
+
+pub trait ToDoc {
+    fn to_doc(&self) -> RcDoc<'_>;
 }
 
 impl ToDoc for Name {

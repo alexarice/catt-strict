@@ -5,9 +5,9 @@ use chumsky::{prelude::Simple, primitive::just, text::TextParser, Parser};
 use pretty::RcDoc;
 
 use crate::{
-    common::Name,
+    common::{Name, ToDoc},
     eval::SemCtx,
-    syntax::{ctx, ident, term, ty, Ctx, Term, ToDoc, Type},
+    syntax::{ctx, ident, term, ty, Ctx, Term, Type},
     typecheck::{Environment, TypeCheckError},
 };
 
