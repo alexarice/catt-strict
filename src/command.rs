@@ -1,4 +1,10 @@
-use std::{ffi::OsString, fmt::Debug, hash::Hash, ops::Range, path::PathBuf};
+use std::{
+    ffi::OsString,
+    fmt::{Debug, Display},
+    hash::Hash,
+    ops::Range,
+    path::PathBuf,
+};
 
 use ariadne::{Color, Fmt, Report, ReportKind};
 use chumsky::{
@@ -16,6 +22,23 @@ use crate::{
     syntax::{ctx, ident, term, ty, Ctx, Term, Type},
     typecheck::{Environment, TypeCheckError},
 };
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Src {
+    File(PathBuf),
+    Import(String),
+    Repl(String),
+}
+
+impl Display for Src {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Src::File(p) => f.write_fmt(format_args!("{}", p.display())),
+            Src::Import(_) => f.write_str("top_level"),
+            Src::Repl(_) => f.write_str("repl"),
+        }
+    }
+}
 
 #[derive(Error, Debug)]
 pub enum CattError<Id>
@@ -101,7 +124,7 @@ pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
 }
 
 impl Command {
-    pub fn run(self, env: &mut Environment) -> Result<(), CattError<Option<PathBuf>>> {
+    pub fn run(self, env: &mut Environment) -> Result<(), CattError<Src>> {
         println!("----------------------------------------");
         match self {
             Command::DefHead(nm, h) => {
@@ -190,14 +213,17 @@ impl Command {
                                 .map(|e| {
                                     Report::build(
                                         ReportKind::Error,
-                                        filename.clone(),
+                                        Src::File(filename.clone()),
                                         e.span().start,
                                     )
                                     .with_message(e.to_string())
                                     .with_label(
-                                        ariadne::Label::new((Some(filename.clone()), e.span()))
-                                            .with_message(format!("{:?}", e.reason()))
-                                            .with_color(Color::Red),
+                                        ariadne::Label::new((
+                                            Src::File(filename.clone()),
+                                            e.span(),
+                                        ))
+                                        .with_message(format!("{:?}", e.reason()))
+                                        .with_color(Color::Red),
                                     )
                                     .finish()
                                 })
@@ -209,7 +235,7 @@ impl Command {
                     match cmd.run(env) {
                         Ok(_) => {}
                         Err(e) => {
-                            return Err(CattError::Report(e.to_report(&Some(filename))));
+                            return Err(CattError::Report(e.to_report(&Src::File(filename))));
                         }
                     }
                 }
