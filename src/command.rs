@@ -12,9 +12,9 @@ use crate::{
 };
 
 pub enum Command {
-    LetHead(Name, Term<Range<usize>>),
-    LetCtx(Name, Ctx<Range<usize>>, Term<Range<usize>>),
-    LetWT(
+    DefHead(Name, Term<Range<usize>>),
+    DefCtx(Name, Ctx<Range<usize>>, Term<Range<usize>>),
+    DefWT(
         Name,
         Ctx<Range<usize>>,
         Type<Range<usize>>,
@@ -24,7 +24,7 @@ pub enum Command {
 }
 
 pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
-    just("let ")
+    just("def ")
         .ignore_then(
             ident()
                 .padded()
@@ -36,9 +36,9 @@ pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
                 .then(just("=").padded().ignore_then(term())),
         )
         .map(|((id, x), tm)| match x {
-            None => Command::LetHead(id, tm),
-            Some((ctx, None)) => Command::LetCtx(id, ctx, tm),
-            Some((ctx, Some(ty))) => Command::LetWT(id, ctx, ty, tm),
+            None => Command::DefHead(id, tm),
+            Some((ctx, None)) => Command::DefCtx(id, ctx, tm),
+            Some((ctx, Some(ty))) => Command::DefWT(id, ctx, ty, tm),
         })
         .or(just("normalise ")
             .ignore_then(ctx())
@@ -50,7 +50,7 @@ impl Command {
     pub fn run(self, env: &mut Environment) -> Result<(), TypeCheckError<Range<usize>>> {
         println!("----------------------------------------");
         match self {
-            Command::LetHead(nm, h) => {
+            Command::DefHead(nm, h) => {
                 println!("{} {nm}", "Inferring".fg(Color::Green));
                 let x = h.infer(env)?;
                 println!("{}", x.1.to_expr(Some(&x.0), false).to_doc().pretty(80));
@@ -61,7 +61,7 @@ impl Command {
                 );
                 env.top_level.insert(nm, x);
             }
-            Command::LetCtx(nm, ctx, tm) => {
+            Command::DefCtx(nm, ctx, tm) => {
                 println!("{} {nm}", "Checking".fg(Color::Green));
                 let local = ctx.check(env)?;
                 let (tmt, tyt) = tm.check(env, &local)?;
@@ -80,7 +80,7 @@ impl Command {
 
                 env.top_level.insert(nm, (local.ctx, tmt, tyt));
             }
-            Command::LetWT(nm, ctx, ty, tm) => {
+            Command::DefWT(nm, ctx, ty, tm) => {
                 println!(
                     "{} {nm} {} {ty}",
                     "Checking".fg(Color::Green),

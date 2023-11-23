@@ -1,31 +1,31 @@
-let id = coh [(x) : x -> x]
+def id = coh [(x) : x -> x]
 
 normalise (a:*)(b: a -> a) | id<b>
 
-let id2 = coh [(x(f)y): f -> f]
+def id2 = coh [(x(f)y): f -> f]
 
 normalise (a:*) (b: a -> a) | id2<b>
 
-let disc = coh[(x(f)y): x -> y]
+def disc = coh[(x(f)y): x -> y]
 
 normalise (a: *) (b: a -> a) | disc<b>
 
-let comp = coh[(y(f)z(g)w): y -> w]
+def comp = coh[(y(f)z(g)w): y -> w]
 
-let endo = coh[(x(f)y(g)z): comp<f,g> -> comp<f,g>]
+def endo = coh[(x(f)y(g)z): comp<f,g> -> comp<f,g>]
 
 normalise (a: *) (b: a -> a) | endo<b,b>
 
 normalise (a: *) (b: a -> a) | comp<id<a>,b>
 
-let whisk_r = coh[((f(a)g)(h)) : comp<f,h> -> comp<g,h>]
+def whisk_r = coh[((f(a)g)(h)) : comp<f,h> -> comp<g,h>]
 
-let whisk_l = coh[((f)(g(a)h)) : comp<f,g> -> comp<f,h>]
+def whisk_l = coh[((f)(g(a)h)) : comp<f,g> -> comp<f,h>]
 
-let swap = coh[((f(a)g)(i(b)k)) : comp<whisk_r<a,i>, whisk_l<g,b>> -> comp<whisk_l<f,b>, whisk_r<a,k>>]
+def swap = coh[((f(a)g)(i(b)k)) : comp<whisk_r<a,i>, whisk_l<g,b>> -> comp<whisk_l<f,b>, whisk_r<a,k>>]
 
-let eh (x : *) (a : id<x> -> id<x>) (b : id<x> -> id<x>) : comp<a,b> -> comp<b,a> = swap<a,b>
+def eh (x : *) (a : id<x> -> id<x>) (b : id<x> -> id<x>) : comp<a,b> -> comp<b,a> = swap<a,b>
 
 normalise (x(f)y(g)z(h)w) | comp<f,comp<g,h>>
 
-let test2 = ucomp [ 1 0 1 ]
+def test2 = ucomp [ 1 0 1 ]
