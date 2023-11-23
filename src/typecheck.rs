@@ -95,7 +95,8 @@ pub enum TypeCheckError<S> {
     LabelToSub(Label<S>, S),
     #[error("Locally maximal argument missing from labelling \"{}\"", .0.fg(Color::Red))]
     LocallyMaxMissing(Label<S>, S),
-    #[error("Dimension sequence \"{}\" does not correspond to pasting diagram", .0.into_iter().map(ToString::to_string).join(" ").fg(Color::Red))]
+    #[error("Dimension sequence \"{}\" does not correspond to pasting diagram",
+	    .0.iter().map(ToString::to_string).join(" ").fg(Color::Red))]
     BadDimSeq(Vec<usize>, S),
 }
 

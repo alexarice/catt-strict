@@ -326,9 +326,9 @@ impl<T: Default> Tree<T> {
     }
 
     pub fn from_usizes(v: &[usize]) -> Option<Self> {
-        let mut tree = Self::disc(*v.get(0)?);
+        let mut tree = Self::disc(*v.first()?);
 
-        for c in &v[1..].into_iter().chunks(2) {
+        for c in &v[1..].iter().chunks(2) {
             let (codim, dim) = c.collect_tuple()?;
             tree.whisk_right(*codim, *dim)?;
         }
