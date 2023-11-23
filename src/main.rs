@@ -1,11 +1,14 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    fmt, fs,
+    path::PathBuf,
+};
 
-use ariadne::{Color, Label, Report, ReportKind, Source};
+use ariadne::{Cache, Source};
 use catt_strict::{
-    command::command,
+    command::Command,
     typecheck::{Environment, Insertion, Reduction, Support},
 };
-use chumsky::prelude::*;
 
 #[derive(clap::Parser)]
 /// Interpreter for semistrict variations of Catt
@@ -27,10 +30,34 @@ struct Args {
     filename: PathBuf,
 }
 
+#[derive(Default, Debug, Clone)]
+pub struct MyCache {
+    files: HashMap<Option<PathBuf>, Source>,
+}
+
+impl Cache<Option<PathBuf>> for MyCache {
+    fn fetch(&mut self, path: &Option<PathBuf>) -> Result<&Source, Box<dyn fmt::Debug + '_>> {
+        Ok(match self.files.entry(path.clone()) {
+            // TODO: Don't allocate here
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => entry.insert(if let Some(p) = path {
+                Source::from(&fs::read_to_string(p).map_err(|e| Box::new(e) as _)?)
+            } else {
+                Source::from("")
+            }),
+        })
+    }
+    fn display<'a>(&self, path: &'a Option<PathBuf>) -> Option<Box<dyn fmt::Display + 'a>> {
+        if let Some(p) = path {
+            Some(Box::new(p.display()))
+        } else {
+            Some(Box::new("top_level"))
+        }
+    }
+}
+
 fn main() {
     let args: Args = clap::Parser::parse();
-    let filename = args.filename;
-    let src = std::fs::read_to_string(&filename).unwrap();
 
     let mut env = Environment {
         top_level: HashMap::new(),
@@ -52,38 +79,10 @@ fn main() {
         },
     };
 
-    let parsed = command()
-        .separated_by(text::newline().repeated())
-        .then_ignore(end())
-        .parse(src.trim());
-
-    let fn_str = filename.to_string_lossy().into_owned();
-
-    match parsed {
-        Ok(cmds) => {
-            for cmd in cmds {
-                match cmd.run(&mut env) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        e.to_report(&fn_str)
-                            .print((&fn_str, Source::from(&src)))
-                            .unwrap();
-                        break;
-                    }
-                }
-            }
-        }
-        Err(errs) => errs.into_iter().for_each(|e| {
-            Report::build(ReportKind::Error, &fn_str, e.span().start)
-                .with_message(e.to_string())
-                .with_label(
-                    Label::new((&fn_str, e.span()))
-                        .with_message(format!("{:?}", e.reason()))
-                        .with_color(Color::Red),
-                )
-                .finish()
-                .print((&fn_str, Source::from(&src)))
-                .unwrap()
+    match Command::Import(args.filename, 0..0).run(&mut env) {
+        Ok(_) => {}
+        Err(err) => err.to_report(&None).into_iter().for_each(|rep| {
+            rep.print(MyCache::default()).unwrap();
         }),
     }
 }

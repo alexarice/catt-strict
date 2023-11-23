@@ -1,8 +1,14 @@
-use std::ops::Range;
+use std::{ffi::OsString, fmt::Debug, hash::Hash, ops::Range, path::PathBuf};
 
-use ariadne::{Color, Fmt};
-use chumsky::{prelude::Simple, primitive::just, text::TextParser, Parser};
+use ariadne::{Color, Fmt, Report, ReportKind};
+use chumsky::{
+    prelude::*,
+    primitive::just,
+    text::{self, TextParser},
+    Parser,
+};
 use pretty::RcDoc;
+use thiserror::Error;
 
 use crate::{
     common::{Name, ToDoc},
@@ -10,6 +16,40 @@ use crate::{
     syntax::{ctx, ident, term, ty, Ctx, Term, Type},
     typecheck::{Environment, TypeCheckError},
 };
+
+#[derive(Error, Debug)]
+pub enum CattError<Id>
+where
+    (Id, Range<usize>): ariadne::Span,
+{
+    #[error(transparent)]
+    TypeCheckError(#[from] TypeCheckError<Range<usize>>),
+    #[error("Cannot find file: \"{}\"", .0.to_string_lossy().to_string())]
+    FileError(PathBuf, Range<usize>),
+    #[error("Other report")]
+    Report(Vec<Report<'static, (Id, Range<usize>)>>),
+}
+
+impl<Id: Debug + Hash + PartialEq + Eq + Clone> CattError<Id> {
+    pub fn to_report(self, src: &Id) -> Vec<Report<'static, (Id, Range<usize>)>> {
+        let message = self.to_string();
+        match self {
+            CattError::TypeCheckError(e) => vec![e.to_report(src)],
+            CattError::FileError(_, sp) => {
+                let report = Report::build(ReportKind::Error, src.clone(), sp.start())
+                    .with_message(message)
+                    .with_label(
+                        ariadne::Label::new((src.clone(), sp))
+                            .with_message("Unknown file")
+                            .with_color(Color::Red),
+                    )
+                    .finish();
+                vec![report]
+            }
+            CattError::Report(x) => x,
+        }
+    }
+}
 
 pub enum Command {
     DefHead(Name, Term<Range<usize>>),
@@ -21,6 +61,7 @@ pub enum Command {
         Term<Range<usize>>,
     ),
     Normalise(Ctx<Range<usize>>, Term<Range<usize>>),
+    Import(PathBuf, Range<usize>),
 }
 
 pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
@@ -44,10 +85,23 @@ pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
             .ignore_then(ctx())
             .then(just("|").padded().ignore_then(term()))
             .map(|(ctx, tm)| Command::Normalise(ctx, tm)))
+        .or(just("import ").ignore_then(
+            text::whitespace()
+                .at_least(1)
+                .not()
+                .repeated()
+                .at_least(1)
+                .collect()
+                .map_with_span(|s: String, sp| {
+                    let mut pb = PathBuf::from(OsString::from(s));
+                    pb.set_extension("catt");
+                    Command::Import(pb, sp)
+                }),
+        ))
 }
 
 impl Command {
-    pub fn run(self, env: &mut Environment) -> Result<(), TypeCheckError<Range<usize>>> {
+    pub fn run(self, env: &mut Environment) -> Result<(), CattError<Option<PathBuf>>> {
         println!("----------------------------------------");
         match self {
             Command::DefHead(nm, h) => {
@@ -119,6 +173,51 @@ impl Command {
                         )
                     )
                     .pretty(80)
+                );
+            }
+            Command::Import(filename, sp) => {
+                println!("{} {}", "Importing".fg(Color::Green), filename.display());
+                let src = std::fs::read_to_string(&filename)
+                    .map_err(|_| CattError::FileError(filename.clone(), sp))?;
+
+                let parsed = command()
+                    .separated_by(text::newline().repeated())
+                    .then_ignore(end())
+                    .parse(src.trim())
+                    .map_err(|err| {
+                        CattError::Report(
+                            err.into_iter()
+                                .map(|e| {
+                                    Report::build(
+                                        ReportKind::Error,
+                                        filename.clone(),
+                                        e.span().start,
+                                    )
+                                    .with_message(e.to_string())
+                                    .with_label(
+                                        ariadne::Label::new((Some(filename.clone()), e.span()))
+                                            .with_message(format!("{:?}", e.reason()))
+                                            .with_color(Color::Red),
+                                    )
+                                    .finish()
+                                })
+                                .collect(),
+                        )
+                    })?;
+
+                for cmd in parsed {
+                    match cmd.run(env) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            return Err(CattError::Report(e.to_report(&Some(filename))));
+                        }
+                    }
+                }
+                println!("----------------------------------------");
+                println!(
+                    "{} {}",
+                    "Finished importing".fg(Color::Green),
+                    filename.display()
                 );
             }
         }
