@@ -4,12 +4,16 @@ use std::{
     path::PathBuf,
 };
 
-use ariadne::{Cache, Color, Report, ReportKind, Source};
+use ariadne::{Cache, Color, Fmt, Report, ReportKind, Source};
 use catt_strict::{
     command::{command, Command, Src},
     typecheck::{Environment, Insertion, Reduction, Support},
 };
 use chumsky::prelude::*;
+use rustyline::{
+    history::{History, MemHistory},
+    Config,
+};
 
 #[derive(clap::Parser)]
 /// Interpreter for semistrict variations of Catt
@@ -96,15 +100,20 @@ fn main() {
     }
 
     if args.interactive {
-        let mut rl = rustyline::DefaultEditor::new().unwrap();
+        let mut rl =
+            rustyline::Editor::<(), MemHistory>::with_history(Config::default(), MemHistory::new())
+                .unwrap();
         loop {
-            let readline = rl.readline("Catt>> ");
+            let readline = rl.readline(&format!("{}>> ", "Catt".fg(Color::Green)));
 
             match readline {
                 Ok(s) => {
                     if s == "exit" || s == "quit" {
                         break;
+                    } else if s.is_empty() {
+                        continue;
                     } else {
+                        rl.history_mut().add(&s).unwrap();
                         match command().then_ignore(end()).parse(s.trim()) {
                             Ok(command) => match command.run(&mut env) {
                                 Ok(_) => {}
@@ -112,7 +121,7 @@ fn main() {
                                     .to_report(&Src::Repl(s.clone()))
                                     .into_iter()
                                     .for_each(|rep| {
-                                        rep.print(&mut cache).unwrap();
+                                        rep.eprint(&mut cache).unwrap();
                                     }),
                             },
                             Err(err) => err.into_iter().for_each(|e| {
@@ -128,7 +137,7 @@ fn main() {
                                         .with_color(Color::Red),
                                 )
                                 .finish()
-                                .print(&mut cache)
+                                .eprint(&mut cache)
                                 .unwrap()
                             }),
                         }
