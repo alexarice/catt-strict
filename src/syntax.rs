@@ -79,7 +79,7 @@ where
                 branches: vec![],
             })
             .then(tr.then(el).repeated())
-            .delimited_by(just("("), just(")"))
+            .delimited_by(just("{"), just("}"))
             .foldl(|mut tree, (br, el)| {
                 tree.elements.push(el);
                 tree.branches.push(br);
@@ -161,7 +161,7 @@ where
         .padded()
         .separated_by(just(","))
         .at_least(1)
-        .delimited_by(just("<"), just(">"))
+        .delimited_by(just("("), just(")"))
         .map_with_span(Spanned)
         .map(Args::Sub)
         .or(tree(
@@ -333,7 +333,7 @@ impl<S> ToDoc for Args<S> {
     fn to_doc(&self) -> RcDoc<'_> {
         match self {
             Args::Sub(Spanned(args, _)) => RcDoc::group(
-                RcDoc::text("<")
+                RcDoc::text("(")
                     .append(
                         RcDoc::intersperse(
                             args.iter().map(ToDoc::to_doc),
@@ -341,7 +341,7 @@ impl<S> ToDoc for Args<S> {
                         )
                         .nest(1),
                     )
-                    .append(">"),
+                    .append(")"),
             ),
             Args::Label(l) => l.to_doc(),
         }
@@ -434,17 +434,17 @@ impl<T: ToDoc> ToDoc for Tree<T> {
         }
 
         RcDoc::group(
-            RcDoc::text("(")
+            RcDoc::text("{")
                 .append(inner.nest(1))
                 .append(RcDoc::line_())
-                .append(")"),
+                .append("}"),
         )
     }
 }
 
 impl<T: Display> Display for Tree<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "(")?;
+        write!(f, "{{")?;
         let mut iter = self.elements.iter();
         if let Some(e) = iter.next() {
             e.fmt(f)?;
@@ -453,7 +453,7 @@ impl<T: Display> Display for Tree<T> {
             t.fmt(f)?;
             e.fmt(f)?;
         }
-        write!(f, ")")?;
+        write!(f, "}}")?;
         Ok(())
     }
 }
