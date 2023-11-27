@@ -19,8 +19,7 @@ pub enum Term<S> {
     Var(Name, S),
     Coh(Tree<NoDispOption<Name>>, Box<Type<S>>, S),
     Include(Box<Term<S>>, RangeInclusive<usize>, S),
-    UComp(Tree<NoDispOption<Name>>, S),
-    UCompNum(Vec<usize>, S, S),
+    UComp(S),
 }
 
 pub type Sub<S> = Vec<Term<S>>;
@@ -54,8 +53,7 @@ impl<S> Term<S> {
             | Term::Var(_, s)
             | Term::Coh(_, _, s)
             | Term::Include(_, _, s)
-            | Term::UComp(_, s)
-            | Term::UCompNum(_, _, s) => s,
+            | Term::UComp(s) => s,
         }
     }
 }
@@ -93,6 +91,7 @@ where
     })
     .or(recursive(move |tr| {
         el.clone()
+            .padded()
             .separated_by(just(","))
             .at_least(1)
             .delimited_by(just("["), just("]"))
@@ -105,6 +104,10 @@ where
             })
             .or(tr
                 .padded()
+                .or(el
+                    .clone()
+                    .padded()
+                    .map(|e| Tree::singleton(NoDispOption(Some(e)))))
                 .separated_by(just(","))
                 .at_least(1)
                 .delimited_by(just("["), just("]"))
@@ -141,23 +144,7 @@ where
                 .delimited_by(just("["), just("]")),
         )
         .map_with_span(|(ctx, ty), sp| Term::Coh(ctx, Box::new(ty), sp))
-        .or(keyword("ucomp")
-            .ignore_then(text::whitespace())
-            .ignore_then(
-                text::int(10)
-                    .map(|x: String| x.parse::<usize>().unwrap())
-                    .separated_by(text::whitespace().at_least(1))
-                    .at_least(1)
-                    .padded()
-                    .delimited_by(just("["), just("]"))
-                    .collect()
-                    .map_with_span(|v, inner| (v, inner)),
-            )
-            .map_with_span(|(v, inner), outer| Term::UCompNum(v, inner, outer)))
-        .or(keyword("ucomp")
-            .ignore_then(text::whitespace())
-            .ignore_then(tree(ident()).padded().delimited_by(just("["), just("]")))
-            .map_with_span(Term::UComp))
+        .or(keyword("ucomp").map_with_span(|_, s| Term::UComp(s)))
         .or(ident().map_with_span(Term::Var))
         .or(just("‼")
             .ignore_then(term.padded().delimited_by(just("("), just(")")))
@@ -243,7 +230,8 @@ pub fn term() -> impl Parser<char, Term<Range<usize>>, Error = Simple<char>> + C
                 args_with_type(term.clone())
                     .padded()
                     .map_with_span(|a, sp| (a, sp.end()))
-                    .repeated(),
+                    .repeated()
+                    .at_most(1),
             )
             .foldl(|(t, start), (a, end)| (Term::App(Box::new(t), a, start..end), start))
             .map(|(t, _)| t)
@@ -305,22 +293,7 @@ impl<S> ToDoc for Term<S> {
                     .append(RcDoc::line_().append(tm.to_doc()).nest(2))
                     .append(RcDoc::line_().append(")")),
             ),
-            Term::UComp(tr, _) => RcDoc::group(
-                RcDoc::text("ucomp [ ")
-                    .append(tr.to_doc().nest(8))
-                    .append(" ]"),
-            ),
-            Term::UCompNum(v, _, _) => RcDoc::group(
-                RcDoc::text("ucomp [ ")
-                    .append(
-                        RcDoc::intersperse(
-                            v.iter().map(|x| RcDoc::text(x.to_string())),
-                            RcDoc::line(),
-                        )
-                        .nest(8),
-                    )
-                    .append(" ]"),
-            ),
+            Term::UComp(_) => RcDoc::group(RcDoc::text("ucomp")),
         }
     }
 }

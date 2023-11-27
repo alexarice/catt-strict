@@ -129,14 +129,20 @@ impl Command {
         match self {
             Command::DefHead(nm, h) => {
                 println!("{} {nm}", "Inferring".fg(Color::Green));
-                let x = h.infer(env)?;
-                println!("{}", x.1.to_expr(Some(&x.0), false).to_doc().pretty(80));
+                let (ctxt, tmt, tyt) = h.infer(env)?;
+                println!(
+                    "{}",
+                    tmt.to_expr(Some(&ctxt), env.implicits).to_doc().pretty(80)
+                );
                 println!(
                     "{} {}",
                     "has type".fg(Color::Blue),
-                    x.2.to_expr(Some(&x.0), false).to_doc().nest(9).pretty(80)
+                    tyt.to_expr(Some(&ctxt), env.implicits)
+                        .to_doc()
+                        .nest(9)
+                        .pretty(80)
                 );
-                env.top_level.insert(nm, x);
+                env.top_level.insert(nm, (ctxt, tmt, tyt));
             }
             Command::DefCtx(nm, ctx, tm) => {
                 println!("{} {nm}", "Checking".fg(Color::Green));
@@ -144,12 +150,14 @@ impl Command {
                 let (tmt, tyt) = tm.check(env, &local)?;
                 println!(
                     "{}",
-                    tmt.to_expr(Some(&local.ctx), false).to_doc().pretty(80)
+                    tmt.to_expr(Some(&local.ctx), env.implicits)
+                        .to_doc()
+                        .pretty(80)
                 );
                 println!(
                     "{} {}",
                     "has type".fg(Color::Blue),
-                    tyt.to_expr(Some(&local.ctx), false)
+                    tyt.to_expr(Some(&local.ctx), env.implicits)
                         .to_doc()
                         .nest(9)
                         .pretty(80)
@@ -159,9 +167,10 @@ impl Command {
             }
             Command::DefWT(nm, ctx, ty, tm) => {
                 println!(
-                    "{} {nm} {} {ty}",
+                    "{} {nm}\n{} {}",
                     "Checking".fg(Color::Green),
-                    "has type".fg(Color::Blue)
+                    "has type".fg(Color::Blue),
+                    ty.to_doc().nest(9).pretty(80)
                 );
                 let local = ctx.check(env)?;
                 let (tmt, tyt) = tm.check(env, &local)?;
@@ -173,7 +182,7 @@ impl Command {
                 println!(
                     "{} {}",
                     "Checked".fg(Color::Blue),
-                    tmt.to_expr(Some(&local.ctx), false)
+                    tmt.to_expr(Some(&local.ctx), env.implicits)
                         .to_doc()
                         .nest(8)
                         .pretty(80)
@@ -183,17 +192,35 @@ impl Command {
             Command::Normalise(ctx, tm) => {
                 println!("{} {tm}", "Normalising".fg(Color::Green));
                 let local = ctx.check(env)?;
-                let (tmt, _) = tm.check(env, &local)?;
-                let tmn = tmt.eval(&SemCtx::id(local.ctx.positions()), env);
-                let quoted = tmn.quote();
+                let (tmt, tyt) = tm.check(env, &local)?;
+                let sem_ctx = SemCtx::id(local.ctx.positions());
+                let tmn = tmt.eval(&sem_ctx, env);
+                let tyn = tyt.eval(&sem_ctx, env);
                 println!(
                     "{}",
                     RcDoc::group(
-                        RcDoc::text("Normal form:".fg(Color::Blue).to_string()).append(
-                            RcDoc::line()
-                                .append(quoted.to_expr(Some(&local.ctx), false).to_doc())
-                                .nest(2)
-                        )
+                        RcDoc::text("Normal form:".fg(Color::Blue).to_string())
+                            .append(
+                                RcDoc::line()
+                                    .append(
+                                        tmn.quote()
+                                            .to_expr(Some(&local.ctx), env.implicits)
+                                            .to_doc()
+                                    )
+                                    .nest(2)
+                            )
+                            .append(RcDoc::line())
+                            .append(RcDoc::group(
+                                RcDoc::text("has type:".fg(Color::Blue).to_string()).append(
+                                    RcDoc::line()
+                                        .append(
+                                            tyn.quote()
+                                                .to_expr(Some(&local.ctx), env.implicits)
+                                                .to_doc()
+                                        )
+                                        .nest(2)
+                                )
+                            ))
                     )
                     .pretty(80)
                 );

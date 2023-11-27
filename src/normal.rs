@@ -1,15 +1,20 @@
 use std::collections::HashSet;
 
+use derivative::Derivative;
+
 use crate::{
     common::{Name, NoDispOption, Path, Pos, Tree},
     typecheck::Support,
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Derivative)]
+#[derivative(PartialEq)]
 pub struct HeadN {
     pub tree: Tree<NoDispOption<Name>>,
     pub ty: TypeN,
     pub susp: usize,
+    #[derivative(PartialEq = "ignore")]
+    pub ucomp: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

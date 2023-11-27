@@ -1,8 +1,10 @@
 def id = coh [ {x} : x -> x ]
 
-def comp = ucomp [ {x{f}y{g}z} ]
+def comp [f,g] = ucomp
 
-def horiz = ucomp [ {x{f{a}g}y{h{b}i}z} ]
+normalise [f,g,h] | comp(comp(f,g),h)
+
+def horiz [[a],[b]] = ucomp
 
 def unitor_l = coh [ {x{f}y} : comp(id(x),f) -> f ]
 

@@ -1,24 +1,89 @@
-import monoidal
+def id = coh [ {x} : x -> x ]
 
-def swap = coh [ (x(f(a)g)y(h(b)k)z)
-    	       : comp<ucomp [[a],h], ucomp [ 1 0 2 ] <g,b>>
-	         ->
-		 comp<ucomp [ 1 0 2 ] <f,b>, ucomp [ 2 0 1 ] <a,k>>
-	       ]
+def swap = coh [ {x{f{a}g}y{h{b}k}z}
+               : ucomp[ucomp [[a],h], ucomp[g,[b]]]
+                 ->
+                 ucomp[ucomp [f,[b]], ucomp [[a],k]]
+               ]
 
-def swapinv = coh [ (x(f(a)g)y(h(b)k)z)
-    	          : comp<ucomp [ 1 0 2 ] <f,b>, ucomp [ 2 0 1 ] <a,k>>
-	            ->
-		    comp<ucomp [ 2 0 1 ] <a,h>, ucomp [ 1 0 2 ] <g,b>>
-	          ]
+def swapinv = coh [ {x{f{a}g}y{h{b}k}z}
+                  : ucomp[ucomp[f,[b]], ucomp[[a],k]]
+                    ->
+                    ucomp[ucomp[[a],h], ucomp[g,[b]]]
+                  ]
 
-def swapnatleft = coh [ (u(x(f(a)g)y)v(s(h)t)w)
-    		      : comp<ucomp [ 3 1 2 ] <ucomp [ 3 0 1 ] <a,s>, ucomp [ 1 0 2 ] <y,h>>, swap<g,h>>
-		        ->
-			comp<swap<f,h>,ucomp [ 2 1 3 ] <ucomp [ 1 0 2 ] <x,h>, ucomp [ 3 0 1 ] <a,t>>>
-    		      ]
+def swapnatleft = coh [ {u{x{f{a}g}y}v{s{h}t}w}
+                      : ucomp[ ucomp [ [ucomp [[[a]],s]],
+		      	       	       ucomp [y,[h]]
+				     ],
+			       swap(g,h)
+			     ]
+                        ->
+                        ucomp[ swap(f,h),
+			       ucomp[ ucomp [x,[h]],
+			              [ucomp[[[a]],t]]
+				    ]
+			     ]
+                      ]
 
-def swapnatright = coh [ (u(x(f(a)g)y)v(s(h)t)w)
-    		       : comp<ucomp [ 2 1 3 ] <ucomp [ 2 0 1 ] <g,s>,ucomp [ 1 0 3 ] <y,b>>, swap<g,k>>
-		         ->
-			 comp<swap<g,h>,
+def swapnatright = coh [ {u{x{g}y}v{s{h{b}k}t}w}
+                       : ucomp[ ucomp [ ucomp [[g],s],
+		       	 	        [ucomp[y,[[b]]]]
+			              ],
+			        swap(g,k)
+			      ]
+                         ->
+                         ucomp[ swap(g,h),
+			        ucomp[ [ucomp[x,[[b]]]],
+				       ucomp[[g],t]
+				     ]
+		              ]
+                       ]
+
+def left {u{x{f{a}g}y}v{s{h{b}k}t}w}
+  = ucomp [
+            ucomp [
+		    [swap(ucomp[[[a]],s], ucomp[y,[[b]]])],
+		    swap(g,k)
+		  ],
+	    ucomp [
+		    ucomp [ucomp [[f],s], [ucomp [y,[[b]]]]],
+		    [swapnatleft(a,k)]
+		  ],
+	    ucomp [
+		    [swapnatright(f,b)],
+		    ucomp [ucomp [x,[k]], [ucomp [[[a]],t]]]
+		  ]
+	  ]
+
+
+
+def right {u{x{f{a}g}y}v{s{h{b}k}t}w}
+  = ucomp [
+	    ucomp [
+		    ucomp [[ucomp [[[a]],s]], ucomp [y,[h]]],
+		    [swapnatright(g,b)]
+		  ],
+	    ucomp [
+		    [swapnatleft(a,h)],
+		    ucomp [[ucomp [x,[[b]]]], ucomp [[g],t]]
+		  ],
+	    ucomp [
+		    swap(f,h),
+		    [swapinv(ucomp[x,[[b]]], ucomp[[[a]],t])]
+		  ]
+	  ]
+
+def syl_coh = coh [ {u{x{f{a}g}y}v{s{h{b}k}t}w}
+                  : left(a,b)
+                    ->
+                    right(a,b)
+                  ]
+
+normalise (x : *) (a : id(id(x)) -> id(id(x))) (b : id(id(x)) -> id(id(x))) | left(a,b)
+
+normalise (x : *) (a : id(id(x)) -> id(id(x))) (b : id(id(x)) -> id(id(x))) | right(a,b)
+
+def syllepsis (x : *) (a : id(id(x)) -> id(id(x))) (b : id(id(x)) -> id(id(x)))
+  : swap(a,b) -> swapinv(b,a)
+  = syl_coh(a,b)

@@ -30,6 +30,10 @@ struct Args {
     #[arg(long)]
     no_fullness_check: bool,
 
+    /// Show all implicits
+    #[arg(long)]
+    implicits: bool,
+
     /// Start repl
     #[arg(short, long)]
     interactive: bool,
@@ -77,6 +81,7 @@ fn main() {
                 None
             },
         },
+        implicits: args.implicits,
         support: if args.no_fullness_check {
             Support::FullInverse
         } else {

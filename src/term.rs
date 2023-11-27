@@ -92,7 +92,7 @@ impl TermT {
             TermT::Include(tm, rng) => {
                 Term::Include(Box::new(tm.to_expr(ctx, with_ict)), rng.clone(), ())
             }
-            TermT::UComp(tr, _) => Term::UComp(tr.clone(), ()),
+            TermT::UComp(_, _) => Term::UComp(()),
         }
     }
 }
@@ -142,7 +142,7 @@ impl TypeT {
                 (),
             ),
             TypeT::App(ty, args) => Type::App(
-                Box::new(ty.to_expr(ctx, with_ict)),
+                Box::new(ty.to_expr(None, with_ict)),
                 args.to_expr(ctx, with_ict),
                 (),
             ),

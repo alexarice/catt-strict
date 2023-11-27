@@ -3,9 +3,9 @@ use std::hash::Hash;
 use std::{collections::HashMap, ops::Range};
 
 use ariadne::{Color, Fmt, Report, ReportKind, Span};
-use itertools::Itertools;
 use thiserror::Error;
 
+use crate::common::ToDoc;
 use crate::{
     common::{Name, NoDispOption, Pos, Spanned, Tree},
     eval::SemCtx,
@@ -59,6 +59,7 @@ pub struct Environment {
     pub top_level: HashMap<Name, (CtxT, TermT, TypeT)>,
     pub reduction: Reduction,
     pub support: Support,
+    pub implicits: bool,
 }
 
 #[derive(Error, Debug)]
@@ -91,13 +92,12 @@ pub enum TypeCheckError<S> {
     DimensionMismatch(Label<S>, S),
     #[error("Substitution \"{}\" cannot be coerced to labelling", .0.fg(Color::Red))]
     SubToLabel(Args<S>, S),
-    #[error("Cannot convert labelling \"{}\" to substitution", .0.fg(Color::Red))]
-    LabelToSub(Label<S>, S),
+    #[error("Term \"{}\" should live over tree \"{}\"", .0.fg(Color::Red), .1.fg(Color::Green))]
+    TermNotTree(Term<S>, Tree<NoDispOption<Name>>),
     #[error("Locally maximal argument missing from labelling \"{}\"", .0.fg(Color::Red))]
     LocallyMaxMissing(Label<S>, S),
-    #[error("Dimension sequence \"{}\" does not correspond to pasting diagram",
-	    .0.iter().map(ToString::to_string).join(" ").fg(Color::Red))]
-    BadDimSeq(Vec<usize>, S),
+    #[error("Term \"{}\" lives in context \"{}\" but inferred context was \"{}\"", .0.fg(Color::Red), .1.fg(Color::Red), .2.fg(Color::Green))]
+    TreeMismatch(Term<S>, Tree<NoDispOption<Name>>, Tree<NoDispOption<Name>>),
 }
 
 impl TypeCheckError<Range<usize>> {
@@ -109,9 +109,7 @@ impl TypeCheckError<Range<usize>> {
             | TypeCheckError::InferredTypesNotEqual(_, _, _, _, s)
             | TypeCheckError::LabelMismatch(_, _, _, s)
             | TypeCheckError::DimensionMismatch(_, s)
-            | TypeCheckError::LabelToSub(_, s)
-            | TypeCheckError::LocallyMaxMissing(_, s)
-            | TypeCheckError::BadDimSeq(_, s) => s,
+            | TypeCheckError::LocallyMaxMissing(_, s) => s,
             TypeCheckError::Fullness(ty)
             | TypeCheckError::TypeMismatch(ty, _)
             | TypeCheckError::CannotCheck(ty) => ty.span(),
@@ -119,7 +117,9 @@ impl TypeCheckError<Range<usize>> {
             | TypeCheckError::CannotCheckCtx(tm)
             | TypeCheckError::InferredTypeWrong(tm, _, _)
             | TypeCheckError::InferredTypeWrongCalc(tm, _, _)
-            | TypeCheckError::TermMismatch(tm, _) => tm.span(),
+            | TypeCheckError::TermMismatch(tm, _)
+            | TypeCheckError::TreeMismatch(tm, _, _)
+            | TypeCheckError::TermNotTree(tm, _) => tm.span(),
         }
     }
     pub fn to_report<Id>(self, src: &Id) -> Report<'static, (Id, Range<usize>)>
@@ -233,13 +233,6 @@ impl TypeCheckError<Range<usize>> {
                         .with_color(Color::Red),
                 );
             }
-            TypeCheckError::LabelToSub(_, sp) => {
-                report.add_label(
-                    ariadne::Label::new((src.clone(), sp))
-                        .with_message("Label found when substitution expected")
-                        .with_color(Color::Red),
-                );
-            }
             TypeCheckError::LocallyMaxMissing(_, sp) => {
                 report.add_label(
                     ariadne::Label::new((src.clone(), sp))
@@ -247,9 +240,14 @@ impl TypeCheckError<Range<usize>> {
                         .with_color(Color::Red),
                 );
             }
-            TypeCheckError::BadDimSeq(_, sp) => report.add_label(
-                ariadne::Label::new((src.clone(), sp))
-                    .with_message("Dimension sequence malformed")
+            TypeCheckError::TermNotTree(t, _) => report.add_label(
+                ariadne::Label::new((src.clone(), t.span().clone()))
+                    .with_message("Term does not live over tree context")
+                    .with_color(Color::Red),
+            ),
+            TypeCheckError::TreeMismatch(t, _, _) => report.add_label(
+                ariadne::Label::new((src.clone(), t.span().clone()))
+                    .with_message("Term does not live over correct tree")
                     .with_color(Color::Red),
             ),
         }
@@ -287,24 +285,6 @@ impl<S: Clone + Debug> Term<S> {
                     tyt,
                 ))
             }
-            Term::UComp(tr, _) => {
-                let ty = tr.unbiased_type(tr.dim());
-                Ok((
-                    CtxT::Tree(tr.clone()),
-                    TermT::UComp(tr.clone(), Box::new(ty.clone())),
-                    ty,
-                ))
-            }
-            Term::UCompNum(v, inner, _) => {
-                let tr = Tree::from_usizes(v)
-                    .ok_or_else(|| TypeCheckError::BadDimSeq(v.clone(), inner.clone()))?;
-                let ty = tr.unbiased_type(tr.dim());
-                Ok((
-                    CtxT::Tree(tr.clone()),
-                    TermT::UComp(tr, Box::new(ty.clone())),
-                    ty,
-                ))
-            }
             t => Err(TypeCheckError::CannotInferCtx(t.clone())),
         }
     }
@@ -319,20 +299,112 @@ impl<S: Clone + Debug> Term<S> {
                 .map
                 .get(x)
                 .map(|(p, ty)| (TermT::Var(p.clone()), ty.clone()))
-                .ok_or(TypeCheckError::UnknownLocal(x.clone(), sp.clone())),
+                .ok_or_else(|| TypeCheckError::UnknownLocal(x.clone(), sp.clone())),
+            t @ Term::UComp(_) => {
+                if let CtxT::Tree(t) = &local.ctx {
+                    let ty = t.unbiased_type(t.dim());
+                    Ok((TermT::UComp(t.clone(), Box::new(ty.clone())), ty))
+                } else {
+                    Err(TypeCheckError::CannotCheckCtx(t.clone()))
+                }
+            }
             Term::App(head, args, _) => {
-                let (ctx, tm, ty) = head.infer(env)?;
-                let awt = args.args.infer(env, local, &ctx)?;
+                let (tmt, tyt, awt, tyn) = match &args.args {
+                    Args::Sub(Spanned(sub, sp)) => {
+                        let (ctxt, tm, ty) = head.infer(env)?;
+                        let (awt, tyn) = match ctxt {
+                            CtxT::Tree(tr) => {
+                                let label = Label::from_sub(sub, &tr, sp)?;
+                                let (l, lty) = label.infer(env, local, sp)?;
+                                (
+                                    ArgsWithTypeT {
+                                        args: ArgsT::Label(l),
+                                        ty: Box::new(lty.quote()),
+                                    },
+                                    lty,
+                                )
+                            }
+                            CtxT::Ctx(ctx) => {
+                                let (args, tys): (Vec<TermT>, Vec<(TypeT, &Term<S>)>) = sub
+                                    .iter()
+                                    .map(|t| Ok((t.check(env, local)?, t)))
+                                    .collect::<Result<Vec<_>, _>>()?
+                                    .into_iter()
+                                    .map(|((tt, ty), tm)| (tt, (ty, tm)))
+                                    .unzip();
+                                let awt = ArgsWithTypeT {
+                                    args: ArgsT::Sub(args),
+                                    ty: Box::new(tys[0].0.clone()),
+                                };
+
+                                let sem_ctx = SemCtx::id(local.ctx.positions());
+
+                                let args_sem_ctx = awt.eval(&sem_ctx, env);
+
+                                for (x, (y, tm)) in ctx.iter().map(|x| &x.1).zip(tys) {
+                                    // TODO this is wrong
+                                    let xn = x.eval(&args_sem_ctx, env);
+                                    let yn = y.eval(&sem_ctx, env);
+                                    if xn != yn {
+                                        let xe =
+                                            xn.quote().to_expr(Some(&local.ctx), env.implicits);
+                                        let ye =
+                                            yn.quote().to_expr(Some(&local.ctx), env.implicits);
+                                        return Err(TypeCheckError::InferredTypeWrongCalc(
+                                            tm.clone(),
+                                            ye,
+                                            xe,
+                                        ));
+                                    }
+                                }
+
+                                let tyn = awt.ty.eval(&sem_ctx, env);
+
+                                (awt, tyn)
+                            }
+                        };
+
+                        (tm, ty, awt, tyn)
+                    }
+                    Args::Label(Spanned(l, sp)) => {
+                        let (tmt, tyt) =
+                            head.check(env, &l.map_ref(&|_| NoDispOption(None)).to_map())?;
+                        let (lt, tyn) = l.infer(env, local, sp)?;
+
+                        let awt = ArgsWithTypeT {
+                            args: ArgsT::Label(lt),
+                            ty: Box::new(tyn.quote()),
+                        };
+
+                        (tmt, tyt, awt, tyn)
+                    }
+                };
                 if let Some(t) = &args.ty {
-                    t.check(env, local, &awt.ty.eval(&SemCtx::id(ctx.positions()), env))?;
+                    t.check(env, local, &tyn)?;
                 }
 
                 Ok((
-                    TermT::App(Box::new(tm), awt.clone()),
-                    TypeT::App(Box::new(ty), awt),
+                    TermT::App(Box::new(tmt), awt.clone()),
+                    TypeT::App(Box::new(tyt), awt),
                 ))
             }
-            t => Err(TypeCheckError::CannotCheckCtx(t.clone())),
+            t => {
+                if let CtxT::Tree(tr) = &local.ctx {
+                    let (ctxt, tmt, tyt) = t.infer(env)?;
+                    match ctxt {
+                        CtxT::Tree(tr_inf) => {
+                            if &tr_inf != tr {
+                                Err(TypeCheckError::TreeMismatch(t.clone(), tr_inf, tr.clone()))
+                            } else {
+                                Ok((tmt, tyt))
+                            }
+                        }
+                        CtxT::Ctx(_) => Err(TypeCheckError::TermNotTree(t.clone(), tr.clone())),
+                    }
+                } else {
+                    Err(TypeCheckError::CannotCheckCtx(t.clone()))
+                }
+            }
         }
     }
 }
@@ -356,18 +428,18 @@ impl<S: Clone + Debug> Type<S> {
                 let (tyt, mut tyn) = if let Some(ty) = a {
                     let (tyt, tyn) = ty.infer(env, local)?;
                     if tyn != ty1n {
-                        let y = ty1n.quote().to_expr(Some(&local.ctx), false);
+                        let y = ty1n.quote().to_expr(Some(&local.ctx), env.implicits);
                         return Err(TypeCheckError::InferredTypeWrong(s.clone(), y, *ty.clone()));
                     }
                     if tyn != ty2n {
-                        let y = ty2n.quote().to_expr(Some(&local.ctx), false);
+                        let y = ty2n.quote().to_expr(Some(&local.ctx), env.implicits);
                         return Err(TypeCheckError::InferredTypeWrong(t.clone(), y, *ty.clone()));
                     }
                     (tyt, tyn)
                 } else {
                     if ty1n != ty2n {
-                        let x = ty1n.quote().to_expr(Some(&local.ctx), false);
-                        let y = ty2n.quote().to_expr(Some(&local.ctx), false);
+                        let x = ty1n.quote().to_expr(Some(&local.ctx), env.implicits);
+                        let y = ty2n.quote().to_expr(Some(&local.ctx), env.implicits);
                         return Err(TypeCheckError::InferredTypesNotEqual(
                             s.clone(),
                             x,
@@ -394,7 +466,15 @@ impl<S: Clone + Debug> Type<S> {
     ) -> Result<(), TypeCheckError<S>> {
         let (_, tyn) = self.infer(env, local)?;
         if &tyn != ty {
-            let x = ty.quote().to_expr(Some(&local.ctx), false);
+            let x = ty.quote().to_expr(Some(&local.ctx), env.implicits);
+            println!(
+                "self {}",
+                tyn.quote()
+                    .to_expr(Some(&local.ctx), env.implicits)
+                    .to_doc()
+                    .pretty(80)
+            );
+            println!("other {}", x.to_doc().pretty(80));
             return Err(TypeCheckError::TypeMismatch(self.clone(), x));
         }
         Ok(())
@@ -422,6 +502,7 @@ impl<S: Clone + Debug> Label<S> {
                     .ok_or_else(|| TypeCheckError::LocallyMaxMissing(self.clone(), sp.clone()))?;
 
             let (tm, ty) = term.check(env, local)?;
+
             return Ok((
                 Tree::singleton(tm),
                 ty.eval(&SemCtx::id(local.ctx.positions()), env),
@@ -440,8 +521,8 @@ impl<S: Clone + Debug> Label<S> {
                 .ok_or_else(|| TypeCheckError::DimensionMismatch(self.clone(), sp.clone()))?;
             if let Some(s1) = el_norm.last() {
                 if &s != s1 {
-                    let x = s.quote().to_expr(Some(&local.ctx), false);
-                    let y = s1.quote().to_expr(Some(&local.ctx), false);
+                    let x = s.quote().to_expr(Some(&local.ctx), env.implicits);
+                    let y = s1.quote().to_expr(Some(&local.ctx), env.implicits);
                     return Err(TypeCheckError::LabelMismatch(
                         self.clone(),
                         x,
@@ -465,7 +546,7 @@ impl<S: Clone + Debug> Label<S> {
                     let tmt = tm.check(env, local)?.0;
                     let tmn = tmt.eval(&SemCtx::id(local.ctx.positions()), env);
                     if tmn != eln {
-                        let x = eln.quote().to_expr(Some(&local.ctx), false);
+                        let x = eln.quote().to_expr(Some(&local.ctx), env.implicits);
                         Err(TypeCheckError::TermMismatch(tm.clone(), x))
                     } else {
                         Ok(tmt)
@@ -476,63 +557,6 @@ impl<S: Clone + Debug> Label<S> {
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok((Tree { elements, branches }, ty.unwrap()))
-    }
-}
-
-impl<S: Clone + Debug> Args<S> {
-    pub fn infer(
-        &self,
-        env: &Environment,
-        local: &Local,
-        ctxt: &CtxT,
-    ) -> Result<ArgsWithTypeT, TypeCheckError<S>> {
-        match (ctxt, self) {
-            (CtxT::Ctx(ctx), Args::Sub(Spanned(sub, _))) => {
-                let (args, tys): (Vec<TermT>, Vec<(TypeT, &Term<S>)>) = sub
-                    .iter()
-                    .map(|t| Ok((t.check(env, local)?, t)))
-                    .collect::<Result<Vec<_>, _>>()?
-                    .into_iter()
-                    .map(|((tt, ty), tm)| (tt, (ty, tm)))
-                    .unzip();
-                let awt = ArgsWithTypeT {
-                    args: ArgsT::Sub(args),
-                    ty: Box::new(tys[0].0.clone()),
-                };
-
-                let sem_ctx = SemCtx::id(local.ctx.positions());
-
-                let args_sem_ctx = awt.eval(&sem_ctx, env);
-
-                for (x, (y, tm)) in ctx.iter().map(|x| &x.1).zip(tys) {
-                    let xn = x.eval(&args_sem_ctx, env);
-                    let yn = y.eval(&sem_ctx, env);
-                    if xn != yn {
-                        let xe = x.to_expr(Some(&local.ctx), false);
-                        let ye = y.to_expr(Some(&local.ctx), false);
-                        return Err(TypeCheckError::InferredTypeWrongCalc(tm.clone(), ye, xe));
-                    }
-                }
-
-                Ok(awt)
-            }
-            (CtxT::Ctx(_), Args::Label(Spanned(l, sp))) => {
-                Err(TypeCheckError::LabelToSub(l.clone(), sp.clone()))
-            }
-            (CtxT::Tree(ctx), Args::Sub(Spanned(sub, sp))) => Label::from_sub(sub, ctx, sp)
-                .and_then(|l| {
-                    l.infer(env, local, sp).map(|(lt, ty)| ArgsWithTypeT {
-                        args: ArgsT::Label(lt),
-                        ty: Box::new(ty.quote()),
-                    })
-                }),
-            (CtxT::Tree(_), Args::Label(Spanned(l, sp))) => {
-                l.infer(env, local, sp).map(|(lt, ty)| ArgsWithTypeT {
-                    args: ArgsT::Label(lt),
-                    ty: Box::new(ty.quote()),
-                })
-            }
-        }
     }
 }
 

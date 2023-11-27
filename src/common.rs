@@ -343,7 +343,7 @@ pub struct Path {
 impl Display for Path {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for x in self.path.iter().rev() {
-            write!(f, "{x},")?;
+            write!(f, "{x}")?;
         }
         write!(f, "{}", self.here)
     }
@@ -389,7 +389,7 @@ impl Path {
                 path: current_path.clone(),
             };
 
-            current_path.push(*x);
+            current_path.insert(0, *x);
 
             ty = TypeT::Arr(
                 TermT::Var(Pos::Path(fst)),
