@@ -24,7 +24,7 @@ pub enum Term<S> {
 }
 
 pub type Sub<S> = Vec<Term<S>>;
-pub type Label<S> = Tree<Spanned<NoDispOption<Term<S>>, S>>;
+pub type Label<S> = Tree<NoDispOption<Term<S>>>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Args<S> {
@@ -68,17 +68,22 @@ impl<S> Type<S> {
     }
 }
 
-fn tree<O: 'static, P>(el: P) -> impl Parser<char, Tree<O>, Error = Simple<char>> + Clone
+fn tree<O: 'static, P>(
+    el: P,
+) -> impl Parser<char, Tree<NoDispOption<O>>, Error = Simple<char>> + Clone
 where
     P: Parser<char, O, Error = Simple<char>> + Clone + 'static,
 {
-    recursive(move |tr| {
+    recursive(|tr| {
         el.clone()
-            .map(|e| Tree {
-                elements: vec![e],
-                branches: vec![],
-            })
-            .then(tr.then(el).repeated())
+            .or_not()
+            .padded()
+            .map(NoDispOption)
+            .map(Tree::singleton)
+            .then(
+                tr.then(el.clone().or_not().padded().map(NoDispOption))
+                    .repeated(),
+            )
             .delimited_by(just("{"), just("}"))
             .foldl(|mut tree, (br, el)| {
                 tree.elements.push(el);
@@ -86,11 +91,33 @@ where
                 tree
             })
     })
+    .or(recursive(move |tr| {
+        el.clone()
+            .separated_by(just(","))
+            .at_least(1)
+            .delimited_by(just("["), just("]"))
+            .map(|xs| Tree {
+                elements: (0..=xs.len()).map(|_| NoDispOption(None)).collect(),
+                branches: xs
+                    .into_iter()
+                    .map(|e| Tree::singleton(NoDispOption(Some(e))))
+                    .collect(),
+            })
+            .or(tr
+                .padded()
+                .separated_by(just(","))
+                .at_least(1)
+                .delimited_by(just("["), just("]"))
+                .map(|trs| Tree {
+                    elements: (0..=trs.len()).map(|_| NoDispOption(None)).collect(),
+                    branches: trs,
+                }))
+    }))
 }
 
 pub fn ident() -> impl Parser<char, Name, Error = Simple<char>> + Clone {
     text::ident().try_map(|x, span| {
-        if x == "coh" || x == "ucomp" || x == "let" || x == "_" {
+        if x == "coh" || x == "ucomp" || x == "def" || x == "_" {
             Err(Simple::custom(
                 span,
                 format!("Identifier cannot be \"{x}\""),
@@ -108,24 +135,12 @@ where
     keyword("coh")
         .ignore_then(text::whitespace())
         .ignore_then(
-            tree(ident().padded().or_not().map(NoDispOption))
+            tree(ident())
                 .padded()
                 .then(just(":").ignore_then(ty_internal(term.clone()).padded()))
                 .delimited_by(just("["), just("]")),
         )
         .map_with_span(|(ctx, ty), sp| Term::Coh(ctx, Box::new(ty), sp))
-        .or(keyword("ucomp")
-            .ignore_then(text::whitespace())
-            .ignore_then(
-                text::int(10)
-                    .map(|x: String| x.parse::<usize>().unwrap())
-                    .separated_by(text::whitespace().at_least(1))
-                    .at_least(1)
-                    .padded()
-                    .collect()
-                    .map_with_span(|v, inner| (v, inner)),
-            )
-            .map_with_span(|(v, inner), outer| Term::UCompNum(v, inner, outer)))
         .or(keyword("ucomp")
             .ignore_then(text::whitespace())
             .ignore_then(
@@ -141,11 +156,7 @@ where
             .map_with_span(|(v, inner), outer| Term::UCompNum(v, inner, outer)))
         .or(keyword("ucomp")
             .ignore_then(text::whitespace())
-            .ignore_then(
-                tree(ident().padded().or_not().map(NoDispOption))
-                    .padded()
-                    .delimited_by(just("["), just("]")),
-            )
+            .ignore_then(tree(ident()).padded().delimited_by(just("["), just("]")))
             .map_with_span(Term::UComp))
         .or(ident().map_with_span(Term::Var))
         .or(just("‼")
@@ -164,14 +175,7 @@ where
         .delimited_by(just("("), just(")"))
         .map_with_span(Spanned)
         .map(Args::Sub)
-        .or(tree(
-            term.or_not()
-                .map(NoDispOption)
-                .map_with_span(Spanned)
-                .padded(),
-        )
-        .map_with_span(Spanned)
-        .map(Args::Label))
+        .or(tree(term).map_with_span(Spanned).map(Args::Label))
 }
 
 fn args_with_type<P>(
@@ -220,16 +224,14 @@ fn ctx_internal<P>(term: P) -> impl Parser<char, Ctx<Range<usize>>, Error = Simp
 where
     P: Parser<char, Term<Range<usize>>, Error = Simple<char>> + Clone,
 {
-    tree(ident().padded().or_not().map(NoDispOption))
-        .map(Ctx::Tree)
-        .or(ident()
-            .padded()
-            .then(just(":").ignore_then(ty_internal(term.clone()).padded()))
-            .delimited_by(just("("), just(")"))
-            .padded()
-            .repeated()
-            .at_least(1)
-            .map(Ctx::Other))
+    tree(ident()).map(Ctx::Tree).or(ident()
+        .padded()
+        .then(just(":").ignore_then(ty_internal(term.clone()).padded()))
+        .delimited_by(just("("), just(")"))
+        .padded()
+        .repeated()
+        .at_least(1)
+        .map(Ctx::Other))
 }
 
 pub fn term() -> impl Parser<char, Term<Range<usize>>, Error = Simple<char>> + Clone {
@@ -343,7 +345,13 @@ impl<S> ToDoc for Args<S> {
                     )
                     .append(")"),
             ),
-            Args::Label(l) => l.to_doc(),
+            Args::Label(l) => {
+                if l.0.is_max_tree() {
+                    l.0.to_doc_max()
+                } else {
+                    l.to_doc()
+                }
+            }
         }
     }
 }
@@ -413,7 +421,37 @@ impl<S> Display for Ctx<S> {
     }
 }
 
-impl<T: ToDoc> ToDoc for Tree<T> {
+impl<T: ToDoc> Tree<NoDispOption<T>> {
+    fn is_max_tree(&self) -> bool {
+        !self.branches.is_empty()
+            && self.elements.iter().all(|el| matches!(el.0, None))
+            && self.branches.iter().all(Tree::is_max_tree_inner)
+    }
+
+    fn is_max_tree_inner(&self) -> bool {
+        (self.branches.is_empty() && self.elements.first().unwrap().0.is_some())
+            || self.is_max_tree()
+    }
+
+    fn to_doc_max(&self) -> RcDoc<'_> {
+        if self.branches.is_empty() {
+            self.elements.first().unwrap().0.as_ref().unwrap().to_doc()
+        } else {
+            RcDoc::group(
+                RcDoc::text("[")
+                    .append(RcDoc::line_().append(RcDoc::intersperse(
+                        self.branches.iter().map(|br| br.to_doc_max()),
+                        RcDoc::text(",").append(RcDoc::line_()),
+                    )))
+                    .nest(2)
+                    .append(RcDoc::line_())
+                    .append("]"),
+            )
+        }
+    }
+}
+
+impl<T: ToDoc> ToDoc for Tree<NoDispOption<T>> {
     fn to_doc(&self) -> RcDoc<'_> {
         let mut iter = self.elements.iter();
         let mut inner = RcDoc::nil();

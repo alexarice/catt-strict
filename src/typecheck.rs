@@ -404,11 +404,9 @@ impl<S: Clone + Debug> Type<S> {
 impl<S: Clone + Debug> Label<S> {
     fn from_sub<T>(sub: &Sub<S>, tree: &Tree<T>, sp: &S) -> Result<Self, TypeCheckError<S>> {
         let mut iter = sub.iter().cloned();
-        tree.label_from_max(&mut iter)
-            .map(|tr| tr.map(&|tm| Spanned(tm, sp.clone())))
-            .ok_or_else(|| {
-                TypeCheckError::SubToLabel(Args::Sub(Spanned(sub.clone(), sp.clone())), sp.clone())
-            })
+        tree.label_from_max(&mut iter).ok_or_else(|| {
+            TypeCheckError::SubToLabel(Args::Sub(Spanned(sub.clone(), sp.clone())), sp.clone())
+        })
     }
 
     pub fn infer(
@@ -418,7 +416,7 @@ impl<S: Clone + Debug> Label<S> {
         sp: &S,
     ) -> Result<(LabelT, TypeN), TypeCheckError<S>> {
         if self.branches.is_empty() {
-            let Spanned(tm, sp) = self.elements.first().unwrap();
+            let tm = self.elements.first().unwrap();
             let term =
                 tm.0.as_ref()
                     .ok_or_else(|| TypeCheckError::LocallyMaxMissing(self.clone(), sp.clone()))?;
@@ -432,7 +430,7 @@ impl<S: Clone + Debug> Label<S> {
         let mut branches = vec![];
         let mut el_norm = vec![];
         let mut ty = None;
-        for (br, Spanned(_, el_sp)) in self.branches.iter().zip(&self.elements) {
+        for br in &self.branches {
             let (l, mut ty1) = br.infer(env, local, sp)?;
             branches.push(l);
 
@@ -448,7 +446,7 @@ impl<S: Clone + Debug> Label<S> {
                         self.clone(),
                         x,
                         y,
-                        el_sp.clone(),
+                        sp.clone(),
                     ));
                 }
             } else {
@@ -462,7 +460,7 @@ impl<S: Clone + Debug> Label<S> {
             .elements
             .iter()
             .zip(el_norm)
-            .map(|(Spanned(el, _), eln)| match &el.0 {
+            .map(|(el, eln)| match &el.0 {
                 Some(tm) => {
                     let tmt = tm.check(env, local)?.0;
                     let tmn = tmt.eval(&SemCtx::id(local.ctx.positions()), env);

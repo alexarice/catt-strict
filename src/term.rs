@@ -113,9 +113,8 @@ impl ArgsT {
                             .map(|tm| tm.to_expr(ctx, with_ict)),
                     )
                     .unwrap()
-                    .map(&|x| Spanned(x, ()))
                 } else {
-                    l.map_ref(&|tm| Spanned(NoDispOption(Some(tm.to_expr(ctx, with_ict))), ()))
+                    l.map_ref(&|tm| NoDispOption(Some(tm.to_expr(ctx, with_ict))))
                 },
                 (),
             )),
