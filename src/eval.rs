@@ -120,8 +120,13 @@ impl Tree<TermN> {
                         tree = tree.susp();
                         ty = ty.susp();
                     }
+                    let mut new_args = args.clone();
 
-                    Some((p, tree, ty, args.clone()))
+                    for _ in 0..bh {
+                        new_args = new_args.branches.into_iter().next().unwrap();
+                    }
+
+                    Some((p, tree, ty, new_args))
                 }
             }
         })
@@ -340,9 +345,8 @@ impl LabelT {
             Some(i) => {
                 let mut l = outer.path_tree().map(&|p| TermT::Var(Pos::Path(p)));
 
-                l.branches[i] =
-                    LabelT::exterior_sub(&outer.branches[i], bp, &inner.branches[i], ty)
-                        .map(&|tm| TermT::Include(Box::new(TermT::Susp(Box::new(tm))), i..=i + 1));
+                l.branches[i] = LabelT::exterior_sub(&outer.branches[i], bp, inner, ty)
+                    .map(&|tm| TermT::Include(Box::new(TermT::Susp(Box::new(tm))), i..=i + 1));
 
                 l
             }

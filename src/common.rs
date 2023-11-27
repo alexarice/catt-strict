@@ -261,10 +261,7 @@ impl<T> Tree<T> {
     pub fn insertion(&mut self, mut bp: Path, inner: Tree<T>) {
         match bp.path.pop() {
             Some(i) => {
-                let (s, t) = inner.elements.into_iter().collect_tuple().unwrap();
-                self.elements[i] = s;
-                self.elements[i + 1] = t;
-                self.branches[i].insertion(bp, inner.branches.into_iter().next().unwrap());
+                self.branches[i].insertion(bp, inner);
             }
             None => {
                 self.elements.splice(bp.here..bp.here + 2, inner.elements);
