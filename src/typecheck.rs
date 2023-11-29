@@ -295,7 +295,7 @@ impl<S: Clone + Debug> Term<S> {
         local: &Local,
     ) -> Result<(TermT, TypeT), TypeCheckError<S>> {
         match self {
-            Term::Var(x, sp) => local
+            Term::Var(x, sp) if local.map.contains_key(x) => local
                 .map
                 .get(x)
                 .map(|(p, ty)| (TermT::Var(p.clone()), ty.clone()))

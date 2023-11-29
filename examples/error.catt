@@ -1,3 +1,0 @@
-def id = coh [ {x} : x -> x ]
-
-normalise {x} | id(id(id(x)))
