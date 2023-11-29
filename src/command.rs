@@ -174,11 +174,7 @@ impl Command {
                 );
                 let local = ctx.check(env)?;
                 let (tmt, tyt) = tm.check(env, &local)?;
-                ty.check(
-                    env,
-                    &local,
-                    &tyt.eval(&SemCtx::id(local.ctx.positions()), env),
-                )?;
+                ty.check(env, &local, &tyt.eval(&SemCtx::id(&local.ctx), env))?;
                 println!(
                     "{} {}",
                     "Checked".fg(Color::Blue),
@@ -193,7 +189,7 @@ impl Command {
                 println!("{} {tm}", "Normalising".fg(Color::Green));
                 let local = ctx.check(env)?;
                 let (tmt, tyt) = tm.check(env, &local)?;
-                let sem_ctx = SemCtx::id(local.ctx.positions());
+                let sem_ctx = SemCtx::id(&local.ctx);
                 let tmn = tmt.eval(&sem_ctx, env);
                 let tyn = tyt.eval(&sem_ctx, env);
                 println!(

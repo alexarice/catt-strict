@@ -91,6 +91,14 @@ pub struct Tree<T> {
 }
 
 impl<T> Tree<T> {
+    pub fn get(&self, p: &Path) -> &T {
+        let mut tr = self;
+        for x in p.path.iter().rev() {
+            tr = &tr.branches[*x];
+        }
+        &tr.elements[p.here]
+    }
+
     pub fn is_disc(&self) -> bool {
         self.branches.is_empty() || (self.branches.len() == 1 && self.branches[0].is_disc())
     }

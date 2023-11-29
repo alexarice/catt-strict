@@ -337,7 +337,7 @@ impl<S: Clone + Debug> Term<S> {
                                     ty: Box::new(tys[0].0.clone()),
                                 };
 
-                                let sem_ctx = SemCtx::id(local.ctx.positions());
+                                let sem_ctx = SemCtx::id(&local.ctx);
 
                                 let args_sem_ctx = awt.eval(&sem_ctx, env);
 
@@ -420,7 +420,7 @@ impl<S: Clone + Debug> Type<S> {
             Type::Arr(s, a, t, sp) => {
                 let (st, ty1) = s.check(env, local)?;
                 let (tt, ty2) = t.check(env, local)?;
-                let sem_ctx = SemCtx::id(local.ctx.positions());
+                let sem_ctx = SemCtx::id(&local.ctx);
                 let sn = st.eval(&sem_ctx, env);
                 let ty1n = ty1.eval(&sem_ctx, env);
                 let tn = tt.eval(&sem_ctx, env);
@@ -503,10 +503,7 @@ impl<S: Clone + Debug> Label<S> {
 
             let (tm, ty) = term.check(env, local)?;
 
-            return Ok((
-                Tree::singleton(tm),
-                ty.eval(&SemCtx::id(local.ctx.positions()), env),
-            ));
+            return Ok((Tree::singleton(tm), ty.eval(&SemCtx::id(&local.ctx), env)));
         }
         let mut branches = vec![];
         let mut el_norm = vec![];
@@ -544,7 +541,7 @@ impl<S: Clone + Debug> Label<S> {
             .map(|(el, eln)| match &el.0 {
                 Some(tm) => {
                     let tmt = tm.check(env, local)?.0;
-                    let tmn = tmt.eval(&SemCtx::id(local.ctx.positions()), env);
+                    let tmn = tmt.eval(&SemCtx::id(&local.ctx), env);
                     if tmn != eln {
                         let x = eln.quote().to_expr(Some(&local.ctx), env.implicits);
                         Err(TypeCheckError::TermMismatch(tm.clone(), x))

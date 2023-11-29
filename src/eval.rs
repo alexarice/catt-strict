@@ -1,84 +1,93 @@
-use std::{collections::HashMap, ops::RangeInclusive};
+use std::ops::RangeInclusive;
+
+use itertools::Itertools;
 
 use crate::{
     common::{Name, NoDispOption, Path, Pos, Tree},
     normal::{HeadN, TermN, TypeN},
-    term::{ArgsT, ArgsWithTypeT, LabelT, TermT, TypeT},
+    term::{ArgsT, ArgsWithTypeT, CtxT, LabelT, TermT, TypeT},
     typecheck::{Environment, Insertion},
 };
 
 #[derive(Clone, Debug)]
+pub enum SemCtxMap {
+    LabelN(Tree<TermN>),
+    SubN(Vec<TermN>),
+}
+
+#[derive(Clone, Debug)]
 pub struct SemCtx {
-    map: HashMap<Pos, TermN>,
+    map: SemCtxMap,
     ty: TypeN,
 }
 
 impl SemCtx {
-    pub fn new(map: HashMap<Pos, TermN>, ty: TypeN) -> Self {
+    pub fn new(map: SemCtxMap, ty: TypeN) -> Self {
         SemCtx { map, ty }
     }
 
-    pub fn id(positions: impl IntoIterator<Item = Pos>) -> Self {
+    pub fn id(ctx: &CtxT) -> Self {
+        match ctx {
+            CtxT::Tree(tr) => Self::id_tree(tr),
+            CtxT::Ctx(c) => Self::id_vec(c.len()),
+        }
+    }
+
+    pub fn id_tree<T>(positions: &Tree<T>) -> Self {
         SemCtx::new(
-            positions
-                .into_iter()
-                .map(|pos| (pos.clone(), TermN::Variable(pos)))
-                .collect(),
+            SemCtxMap::LabelN(
+                positions
+                    .path_tree()
+                    .map(&|p| TermN::Variable(Pos::Path(p))),
+            ),
+            TypeN::base(),
+        )
+    }
+
+    pub fn id_vec(len: usize) -> Self {
+        SemCtx::new(
+            SemCtxMap::SubN((0..len).map(|i| TermN::Variable(Pos::Level(i))).collect()),
             TypeN::base(),
         )
     }
 
     pub fn get(&self, pos: &Pos) -> TermN {
-        self.map.get(pos).cloned().unwrap()
+        match (&self.map, pos) {
+            (SemCtxMap::LabelN(l), Pos::Path(p)) => l.get(p).clone(),
+            (SemCtxMap::SubN(s), Pos::Level(l)) => s[*l].clone(),
+            _ => panic!("Invalid get"),
+        }
     }
 
     pub fn get_ty(&self) -> TypeN {
         self.ty.clone()
     }
 
-    pub fn restrict(mut self) -> Self {
-        let mut ty = self.ty;
-        ty.0.push((
-            self.map
-                .remove(&Pos::Path(Path::here(0)))
-                .or(self.map.remove(&Pos::Level(0)))
-                .unwrap(),
-            self.map
-                .remove(&Pos::Path(Path::here(1)))
-                .or(self.map.remove(&Pos::Level(1)))
-                .unwrap(),
-        ));
+    pub fn restrict(self) -> Self {
+        if let SemCtxMap::LabelN(l) = self.map {
+            let mut ty = self.ty;
+            let (s, t) = l.elements.into_iter().next_tuple().unwrap();
+            ty.0.push((s, t));
 
-        let map = self
-            .map
-            .into_iter()
-            .map(|(pos, tm)| (pos.de_susp(), tm))
-            .collect();
+            let map = SemCtxMap::LabelN(l.branches.into_iter().next().unwrap());
 
-        SemCtx { ty, map }
+            SemCtx { ty, map }
+        } else {
+            panic!("Tried to restrict non label")
+        }
     }
 
     pub fn include(self, rng: &RangeInclusive<usize>) -> Self {
-        let map = self
-            .map
-            .into_iter()
-            .filter_map(|(pos, tm)| match pos {
-                Pos::Level(_) => None,
-                Pos::Path(mut p) => {
-                    let i = p.fst_mut();
+        if let SemCtxMap::LabelN(mut l) = self.map {
+            let map = SemCtxMap::LabelN(Tree {
+                elements: l.elements.drain(rng.clone()).collect(),
+                branches: l.branches.drain(rng.start()..rng.end()).collect(),
+            });
 
-                    if rng.contains(i) {
-                        *i -= *rng.start();
-                    } else {
-                        return None;
-                    }
-
-                    Some((Pos::Path(p), tm))
-                }
-            })
-            .collect();
-
-        SemCtx { ty: self.ty, map }
+            SemCtx { ty: self.ty, map }
+        } else {
+            panic!("Tried to restrict non label")
+        }
     }
 }
 
@@ -172,21 +181,12 @@ fn eval_coh(
         }
     }
 
-    let tyn = tyt.eval(
-        &SemCtx::id(tree.get_paths().into_iter().map(|(x, _)| Pos::Path(x))),
-        env,
-    );
+    let tyn = tyt.eval(&SemCtx::id_tree(&tree), env);
 
     if env.reduction.endo_coh && tyn.0.last().is_some_and(|(s, t)| s == t) {
         let susp = tyn.dim() - 1;
         if let TypeT::Arr(s, a, _) = tyn.quote() {
-            let sem_ctx = SemCtx::new(
-                args.get_paths()
-                    .into_iter()
-                    .map(|(p, tm)| (Pos::Path(p), tm.clone()))
-                    .collect(),
-                TypeN(vec![]),
-            );
+            let sem_ctx = SemCtx::new(SemCtxMap::LabelN(args), TypeN::base());
 
             let args = s.eval(&sem_ctx, env).to_args(a.eval(&sem_ctx, env));
 
@@ -276,21 +276,12 @@ impl ArgsT {
     pub fn eval(&self, ty: &TypeT, ctx: &SemCtx, env: &Environment) -> SemCtx {
         match self {
             ArgsT::Sub(ts) => {
-                let map = ts
-                    .iter()
-                    .enumerate()
-                    .map(|(i, t)| (Pos::Level(i), t.eval(ctx, env)))
-                    .collect();
+                let map = SemCtxMap::SubN(ts.iter().map(|t| t.eval(ctx, env)).collect());
                 let tyn = ty.eval(ctx, env);
                 SemCtx::new(map, tyn)
             }
             ArgsT::Label(tr) => {
-                let pairs = tr.get_paths();
-
-                let map = pairs
-                    .into_iter()
-                    .map(|(path, tm)| (Pos::Path(path), tm.eval(ctx, env)))
-                    .collect();
+                let map = SemCtxMap::LabelN(tr.map_ref(&|tm| tm.eval(ctx, env)));
 
                 let tyn = ty.eval(ctx, env);
                 SemCtx::new(map, tyn)
