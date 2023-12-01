@@ -1,13 +1,12 @@
-use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::ops::Deref;
 use std::{collections::HashMap, ops::Range};
 
 use ariadne::{Color, Fmt, Report, ReportKind, Span};
 use thiserror::Error;
 
-use crate::eval::slice_quote;
-use crate::normal::TermN;
+use crate::normal::TypeNRef;
 use crate::{
     common::{Name, NoDispOption, Pos, Spanned, Tree},
     eval::SemCtx,
@@ -474,14 +473,14 @@ impl<S: Clone + Debug> Type<S> {
         &self,
         env: &Environment,
         local: &Local,
-        ty: impl Borrow<[(TermN, TermN)]>,
+        ty: &TypeNRef,
     ) -> Result<(), TypeCheckError<S>> {
         match self {
             Type::Hole(_) => Ok(()),
             Type::Arr(s, a, t, _) => {
-                let (sn, tn) = ty.borrow().last().ok_or(TypeCheckError::TypeMismatch(
+                let (sn, tn) = ty.0.last().ok_or(TypeCheckError::TypeMismatch(
                     self.clone(),
-                    slice_quote(ty.borrow()).to_expr(Some(&local.ctx), env.implicits),
+                    ty.quote().to_expr(Some(&local.ctx), env.implicits),
                 ))?;
 
                 let sem_ctx = SemCtx::id(&local.ctx);
@@ -502,19 +501,18 @@ impl<S: Clone + Debug> Type<S> {
                 }
 
                 if let Some(inner) = a {
-                    let x: &[(TermN, TermN)] = ty.borrow();
-                    if x.is_empty() {
+                    if ty.0.is_empty() {
                         return Err(TypeCheckError::TypeMismatch(self.clone(), Type::Base(())));
                     }
-                    inner.check(env, local, &x[0..x.len() - 1])?;
+                    inner.check(env, local, ty.inner())?;
                 }
 
                 Ok(())
             }
             _ => {
                 let (_, tyn) = self.infer(env, local)?;
-                if tyn.0 != ty.borrow() {
-                    let x = slice_quote(ty.borrow()).to_expr(Some(&local.ctx), env.implicits);
+                if tyn.deref() != ty {
+                    let x = ty.quote().to_expr(Some(&local.ctx), env.implicits);
                     return Err(TypeCheckError::TypeMismatch(self.clone(), x));
                 }
                 Ok(())

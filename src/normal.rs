@@ -1,6 +1,7 @@
-use std::{borrow::Borrow, collections::HashSet};
+use std::{collections::HashSet, ops::Deref};
 
 use derivative::Derivative;
+use ref_cast::RefCast;
 
 use crate::{
     common::{Name, NoDispOption, Path, Pos, Tree},
@@ -26,16 +27,22 @@ pub enum TermN {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TypeN(pub Vec<(TermN, TermN)>);
 
+#[derive(Debug, PartialEq, Eq, RefCast)]
+#[repr(transparent)]
+pub struct TypeNRef(pub [(TermN, TermN)]);
+
+impl Deref for TypeN {
+    type Target = TypeNRef;
+
+    fn deref(&self) -> &Self::Target {
+        TypeNRef::ref_cast(&self.0)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CtxN {
     Ctx(Vec<TypeN>),
     Tree(Tree<NoDispOption<Name>>),
-}
-
-impl Borrow<[(TermN, TermN)]> for &TypeN {
-    fn borrow(&self) -> &[(TermN, TermN)] {
-        &self.0
-    }
 }
 
 impl TermN {
@@ -210,5 +217,11 @@ impl Tree<TermN> {
             ],
             branches: vec![self.map(&|tm| tm.susp())],
         }
+    }
+}
+
+impl TypeNRef {
+    pub fn inner(&self) -> &Self {
+        TypeNRef::ref_cast(&self.0[0..self.0.len() - 1])
     }
 }

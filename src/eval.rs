@@ -4,7 +4,7 @@ use itertools::Itertools;
 
 use crate::{
     common::{Name, NoDispOption, Path, Pos, Tree},
-    normal::{HeadN, TermN, TypeN},
+    normal::{HeadN, TermN, TypeN, TypeNRef},
     term::{ArgsT, ArgsWithTypeT, CtxT, LabelT, TermT, TypeT},
     typecheck::{Environment, Insertion},
 };
@@ -325,19 +325,15 @@ impl TermN {
     }
 }
 
-pub fn slice_quote(slice: &[(TermN, TermN)]) -> TypeT {
-    let mut ret = TypeT::Base;
-
-    for (s, t) in slice {
-        ret = TypeT::Arr(s.quote(), Box::new(ret), t.quote())
-    }
-
-    ret
-}
-
-impl TypeN {
+impl TypeNRef {
     pub fn quote(&self) -> TypeT {
-        slice_quote(&self.0)
+        let mut ret = TypeT::Base;
+
+        for (s, t) in &self.0 {
+            ret = TypeT::Arr(s.quote(), Box::new(ret), t.quote())
+        }
+
+        ret
     }
 }
 
