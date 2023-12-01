@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::ops::Deref;
 use std::{collections::HashMap, ops::Range};
 
 use ariadne::{Color, Fmt, Report, ReportKind, Span};
@@ -511,7 +510,7 @@ impl<S: Clone + Debug> Type<S> {
             }
             _ => {
                 let (_, tyn) = self.infer(env, local)?;
-                if tyn.deref() != ty {
+                if &*tyn != ty {
                     let x = ty.quote().to_expr(Some(&local.ctx), env.implicits);
                     return Err(TypeCheckError::TypeMismatch(self.clone(), x));
                 }
