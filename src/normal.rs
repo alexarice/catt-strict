@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{borrow::Borrow, collections::HashSet};
 
 use derivative::Derivative;
 
@@ -30,6 +30,12 @@ pub struct TypeN(pub Vec<(TermN, TermN)>);
 pub enum CtxN {
     Ctx(Vec<TypeN>),
     Tree(Tree<NoDispOption<Name>>),
+}
+
+impl Borrow<[(TermN, TermN)]> for &TypeN {
+    fn borrow(&self) -> &[(TermN, TermN)] {
+        &self.0
+    }
 }
 
 impl TermN {

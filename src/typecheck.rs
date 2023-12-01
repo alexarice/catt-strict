@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::{collections::HashMap, ops::Range};
@@ -5,7 +6,8 @@ use std::{collections::HashMap, ops::Range};
 use ariadne::{Color, Fmt, Report, ReportKind, Span};
 use thiserror::Error;
 
-use crate::common::ToDoc;
+use crate::eval::slice_quote;
+use crate::normal::TermN;
 use crate::{
     common::{Name, NoDispOption, Pos, Spanned, Tree},
     eval::SemCtx,
@@ -98,6 +100,8 @@ pub enum TypeCheckError<S> {
     LocallyMaxMissing(Label<S>, S),
     #[error("Term \"{}\" lives in context \"{}\" but inferred context was \"{}\"", .0.fg(Color::Red), .1.fg(Color::Red), .2.fg(Color::Green))]
     TreeMismatch(Term<S>, Tree<NoDispOption<Name>>, Tree<NoDispOption<Name>>),
+    #[error("Cannot check hole")]
+    Hole(S),
 }
 
 impl TypeCheckError<Range<usize>> {
@@ -109,7 +113,8 @@ impl TypeCheckError<Range<usize>> {
             | TypeCheckError::InferredTypesNotEqual(_, _, _, _, s)
             | TypeCheckError::LabelMismatch(_, _, _, s)
             | TypeCheckError::DimensionMismatch(_, s)
-            | TypeCheckError::LocallyMaxMissing(_, s) => s,
+            | TypeCheckError::LocallyMaxMissing(_, s)
+            | TypeCheckError::Hole(s) => s,
             TypeCheckError::Fullness(ty)
             | TypeCheckError::TypeMismatch(ty, _)
             | TypeCheckError::CannotCheck(ty) => ty.span(),
@@ -250,6 +255,11 @@ impl TypeCheckError<Range<usize>> {
                     .with_message("Term does not live over correct tree")
                     .with_color(Color::Red),
             ),
+            TypeCheckError::Hole(sp) => report.add_label(
+                ariadne::Label::new((src.clone(), sp))
+                    .with_message("Hole cannot be inferred")
+                    .with_color(Color::Red),
+            ),
         }
         report.finish()
     }
@@ -258,6 +268,7 @@ impl TypeCheckError<Range<usize>> {
 impl<S: Clone + Debug> Term<S> {
     pub fn infer(&self, env: &Environment) -> Result<(CtxT, TermT, TypeT), TypeCheckError<S>> {
         match self {
+            Term::Hole(sp) => Err(TypeCheckError::Hole(sp.clone())),
             Term::Susp(t, _) => {
                 let (ctx, tm, ty) = t.infer(env)?;
                 Ok((
@@ -295,6 +306,7 @@ impl<S: Clone + Debug> Term<S> {
         local: &Local,
     ) -> Result<(TermT, TypeT), TypeCheckError<S>> {
         match self {
+            Term::Hole(sp) => Err(TypeCheckError::Hole(sp.clone())),
             Term::Var(x, sp) if local.map.contains_key(x) => local
                 .map
                 .get(x)
@@ -462,22 +474,52 @@ impl<S: Clone + Debug> Type<S> {
         &self,
         env: &Environment,
         local: &Local,
-        ty: &TypeN,
+        ty: impl Borrow<[(TermN, TermN)]>,
     ) -> Result<(), TypeCheckError<S>> {
-        let (_, tyn) = self.infer(env, local)?;
-        if &tyn != ty {
-            let x = ty.quote().to_expr(Some(&local.ctx), env.implicits);
-            println!(
-                "self {}",
-                tyn.quote()
-                    .to_expr(Some(&local.ctx), env.implicits)
-                    .to_doc()
-                    .pretty(80)
-            );
-            println!("other {}", x.to_doc().pretty(80));
-            return Err(TypeCheckError::TypeMismatch(self.clone(), x));
+        match self {
+            Type::Hole(_) => Ok(()),
+            Type::Arr(s, a, t, _) => {
+                let (sn, tn) = ty.borrow().last().ok_or(TypeCheckError::TypeMismatch(
+                    self.clone(),
+                    slice_quote(ty.borrow()).to_expr(Some(&local.ctx), env.implicits),
+                ))?;
+
+                let sem_ctx = SemCtx::id(&local.ctx);
+                if !matches!(s, Term::Hole(_)) {
+                    let (st, _) = s.check(env, local)?;
+                    if &st.eval(&sem_ctx, env) != sn {
+                        let x = sn.quote().to_expr(Some(&local.ctx), env.implicits);
+                        return Err(TypeCheckError::TermMismatch(s.clone(), x));
+                    }
+                }
+
+                if !matches!(t, Term::Hole(_)) {
+                    let (tt, _) = t.check(env, local)?;
+                    if &tt.eval(&sem_ctx, env) != tn {
+                        let x = tn.quote().to_expr(Some(&local.ctx), env.implicits);
+                        return Err(TypeCheckError::TermMismatch(t.clone(), x));
+                    }
+                }
+
+                if let Some(inner) = a {
+                    let x: &[(TermN, TermN)] = ty.borrow();
+                    if x.is_empty() {
+                        return Err(TypeCheckError::TypeMismatch(self.clone(), Type::Base(())));
+                    }
+                    inner.check(env, local, &x[0..x.len() - 1])?;
+                }
+
+                Ok(())
+            }
+            _ => {
+                let (_, tyn) = self.infer(env, local)?;
+                if tyn.0 != ty.borrow() {
+                    let x = slice_quote(ty.borrow()).to_expr(Some(&local.ctx), env.implicits);
+                    return Err(TypeCheckError::TypeMismatch(self.clone(), x));
+                }
+                Ok(())
+            }
         }
-        Ok(())
     }
 }
 

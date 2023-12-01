@@ -325,15 +325,19 @@ impl TermN {
     }
 }
 
+pub fn slice_quote(slice: &[(TermN, TermN)]) -> TypeT {
+    let mut ret = TypeT::Base;
+
+    for (s, t) in slice {
+        ret = TypeT::Arr(s.quote(), Box::new(ret), t.quote())
+    }
+
+    ret
+}
+
 impl TypeN {
     pub fn quote(&self) -> TypeT {
-        let mut ret = TypeT::Base;
-
-        for (s, t) in &self.0 {
-            ret = TypeT::Arr(s.quote(), Box::new(ret), t.quote())
-        }
-
-        ret
+        slice_quote(&self.0)
     }
 }
 

@@ -20,6 +20,7 @@ pub enum Term<S> {
     Coh(Tree<NoDispOption<Name>>, Box<Type<S>>, S),
     Include(Box<Term<S>>, RangeInclusive<usize>, S),
     UComp(S),
+    Hole(S),
 }
 
 pub type Sub<S> = Vec<Term<S>>;
@@ -37,6 +38,7 @@ pub enum Type<S> {
     Arr(Term<S>, Option<Box<Type<S>>>, Term<S>, S),
     App(Box<Type<S>>, ArgsWithType<S>, S),
     Susp(Box<Type<S>>, S),
+    Hole(S),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -53,7 +55,8 @@ impl<S> Term<S> {
             | Term::Var(_, s)
             | Term::Coh(_, _, s)
             | Term::Include(_, _, s)
-            | Term::UComp(s) => s,
+            | Term::UComp(s)
+            | Term::Hole(s) => s,
         }
     }
 }
@@ -61,7 +64,11 @@ impl<S> Term<S> {
 impl<S> Type<S> {
     pub fn span(&self) -> &S {
         match self {
-            Type::Base(s) | Type::Arr(_, _, _, s) | Type::App(_, _, s) | Type::Susp(_, s) => s,
+            Type::Base(s)
+            | Type::Arr(_, _, _, s)
+            | Type::App(_, _, s)
+            | Type::Susp(_, s)
+            | Type::Hole(s) => s,
         }
     }
 }
@@ -145,6 +152,7 @@ where
         )
         .map_with_span(|(ctx, ty), sp| Term::Coh(ctx, Box::new(ty), sp))
         .or(keyword("ucomp").map_with_span(|_, s| Term::UComp(s)))
+        .or(just("_").map_with_span(|_, sp| Term::Hole(sp)))
         .or(ident().map_with_span(Term::Var))
         .or(just("‼")
             .ignore_then(term.padded().delimited_by(just("("), just(")")))
@@ -192,6 +200,7 @@ where
 
     just("*")
         .map_with_span(|_, sp| Type::Base(sp))
+        .or(just("_").map_with_span(|_, sp| Type::Hole(sp)))
         .or(arr.map_with_span(|(s, t), sp| Type::Arr(s, None, t, sp)))
         .then(
             just("|")
@@ -294,6 +303,7 @@ impl<S> ToDoc for Term<S> {
                     .append(RcDoc::line_().append(")")),
             ),
             Term::UComp(_) => RcDoc::group(RcDoc::text("ucomp")),
+            Term::Hole(_) => RcDoc::group(RcDoc::text("_")),
         }
     }
 }
@@ -368,6 +378,7 @@ impl<S> ToDoc for Type<S> {
                     .append(RcDoc::line_())
                     .append(")"),
             ),
+            Type::Hole(_) => RcDoc::text("_"),
         }
     }
 }
