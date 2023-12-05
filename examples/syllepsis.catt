@@ -1,3 +1,5 @@
+// Syllepsis - needs --sua flag
+
 def id = coh [ {x} : x -> x ]
 
 def swap = coh [ {x{f{a}g}y{h{b}k}z}

@@ -1,3 +1,5 @@
+// Basic monoidal category definitions
+
 def id = coh [ {x} : x -> x ]
 
 def comp [f,g] = ucomp

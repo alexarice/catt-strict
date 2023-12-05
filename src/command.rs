@@ -7,19 +7,15 @@ use std::{
 };
 
 use ariadne::{Color, Fmt, Report, ReportKind};
-use chumsky::{
-    prelude::*,
-    primitive::just,
-    text::{self, TextParser},
-    Parser,
-};
+use chumsky::{prelude::*, primitive::just, text, Parser};
 use pretty::RcDoc;
 use thiserror::Error;
 
 use crate::{
     common::{Name, ToDoc},
     eval::SemCtx,
-    syntax::{ctx, ident, term, ty, Ctx, Term, Type},
+    parsing::{comment, ctx, ident, term, ty},
+    syntax::{Ctx, Term, Type},
     typecheck::{Environment, TypeCheckError},
 };
 
@@ -91,13 +87,13 @@ pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
     just("def ")
         .ignore_then(
             ident()
-                .padded()
+                .padded_by(comment())
                 .then(
                     ctx()
-                        .then(just(":").padded().ignore_then(ty()).or_not())
+                        .then(just(":").padded_by(comment()).ignore_then(ty()).or_not())
                         .or_not(),
                 )
-                .then(just("=").padded().ignore_then(term())),
+                .then(just("=").padded_by(comment()).ignore_then(term())),
         )
         .map(|((id, x), tm)| match x {
             None => Command::DefHead(id, tm),
@@ -106,7 +102,7 @@ pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
         })
         .or(just("normalise ")
             .ignore_then(ctx())
-            .then(just("|").padded().ignore_then(term()))
+            .then(just("|").padded_by(comment()).ignore_then(term()))
             .map(|(ctx, tm)| Command::Normalise(ctx, tm)))
         .or(just("import ").ignore_then(
             text::whitespace()
@@ -226,9 +222,9 @@ impl Command {
                 let src = std::fs::read_to_string(&filename)
                     .map_err(|_| CattError::FileError(filename.clone(), sp))?;
 
-                let parsed = command()
-                    .separated_by(text::newline().repeated())
-                    .then_ignore(end())
+                let parsed = comment()
+                    .ignore_then(command().separated_by(comment()))
+                    .then_ignore(comment().ignore_then(end()))
                     .parse(src.trim())
                     .map_err(|err| {
                         CattError::Report(
