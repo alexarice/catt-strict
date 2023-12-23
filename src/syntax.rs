@@ -7,8 +7,8 @@ use std::{
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArgsWithType<S> {
-    pub args: Args<S>,
-    pub ty: Option<Box<Type<S>>>,
+    pub(crate) args: Args<S>,
+    pub(crate) ty: Option<Box<Type<S>>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -48,7 +48,7 @@ pub enum Ctx<S> {
 }
 
 impl<S> Term<S> {
-    pub fn span(&self) -> &S {
+    pub(crate) fn span(&self) -> &S {
         match self {
             Term::App(_, _, s)
             | Term::Susp(_, s)
@@ -63,7 +63,7 @@ impl<S> Term<S> {
 }
 
 impl<S> Type<S> {
-    pub fn span(&self) -> &S {
+    pub(crate) fn span(&self) -> &S {
         match self {
             Type::Base(s)
             | Type::Arr(_, _, _, s)

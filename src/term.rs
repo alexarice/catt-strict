@@ -31,8 +31,8 @@ pub enum ArgsT {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArgsWithTypeT {
-    pub args: ArgsT,
-    pub ty: Box<TypeT>,
+    pub(crate) args: ArgsT,
+    pub(crate) ty: Box<TypeT>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -50,28 +50,17 @@ pub enum CtxT {
 }
 
 impl CtxT {
-    pub fn get_name(&self, p: &Pos) -> Option<Name> {
+    pub(crate) fn get_name(&self, p: &Pos) -> Option<Name> {
         match (self, p) {
             (CtxT::Tree(tr), Pos::Path(x)) => tr.lookup(x).and_then(|x| x.0.clone()),
             (CtxT::Ctx(ctx), Pos::Level(l)) => ctx.get(*l).and_then(|x| x.0.clone()),
             _ => None,
         }
     }
-
-    pub fn positions(&self) -> Vec<Pos> {
-        match self {
-            CtxT::Tree(tr) => tr
-                .get_paths()
-                .into_iter()
-                .map(|(x, _)| Pos::Path(x))
-                .collect(),
-            CtxT::Ctx(ctx) => (0..ctx.len()).map(Pos::Level).collect(),
-        }
-    }
 }
 
 impl TermT {
-    pub fn to_expr(&self, ctx: Option<&CtxT>, with_ict: bool) -> Term<()> {
+    pub(crate) fn to_expr(&self, ctx: Option<&CtxT>, with_ict: bool) -> Term<()> {
         match self {
             TermT::App(tm, args) => Term::App(
                 Box::new(tm.to_expr(None, with_ict)),
@@ -100,7 +89,7 @@ impl TermT {
 }
 
 impl ArgsT {
-    pub fn to_expr(&self, ctx: Option<&CtxT>, with_ict: bool) -> Args<()> {
+    pub(crate) fn to_expr(&self, ctx: Option<&CtxT>, with_ict: bool) -> Args<()> {
         match self {
             ArgsT::Sub(s) => Args::Sub(Spanned(
                 s.iter().map(|tm| tm.to_expr(ctx, with_ict)).collect(),
@@ -125,7 +114,7 @@ impl ArgsT {
 }
 
 impl ArgsWithTypeT {
-    pub fn to_expr(&self, ctx: Option<&CtxT>, with_ict: bool) -> ArgsWithType<()> {
+    pub(crate) fn to_expr(&self, ctx: Option<&CtxT>, with_ict: bool) -> ArgsWithType<()> {
         ArgsWithType {
             args: self.args.to_expr(ctx, with_ict),
             ty: with_ict.then_some(Box::new(self.ty.to_expr(ctx, with_ict))),
@@ -134,7 +123,7 @@ impl ArgsWithTypeT {
 }
 
 impl TypeT {
-    pub fn to_expr(&self, ctx: Option<&CtxT>, with_ict: bool) -> Type<()> {
+    pub(crate) fn to_expr(&self, ctx: Option<&CtxT>, with_ict: bool) -> Type<()> {
         match self {
             TypeT::Base => Type::Base(()),
             TypeT::Arr(s, a, t) => Type::Arr(
@@ -154,7 +143,7 @@ impl TypeT {
 }
 
 impl CtxT {
-    pub fn susp(self) -> CtxT {
+    pub(crate) fn susp(self) -> CtxT {
         match self {
             CtxT::Tree(tr) => {
                 let new_tree = Tree {
@@ -173,11 +162,11 @@ impl CtxT {
 }
 
 impl Tree<NoDispOption<Name>> {
-    pub fn unbiased_comp(self, d: usize) -> TermT {
+    pub(crate) fn unbiased_comp(self, d: usize) -> TermT {
         let ty = self.unbiased_type(d);
         TermT::Coh(self, Box::new(ty))
     }
-    pub fn unbiased_term(self, d: usize) -> TermT {
+    pub(crate) fn unbiased_term(self, d: usize) -> TermT {
         if d == 0 {
             if self.branches.is_empty() {
                 TermT::Var(Pos::Path(Path::here(0)))
@@ -199,7 +188,7 @@ impl Tree<NoDispOption<Name>> {
         }
     }
 
-    pub fn unbiased_type(&self, d: usize) -> TypeT {
+    pub(crate) fn unbiased_type(&self, d: usize) -> TypeT {
         if d == 0 {
             TypeT::Base
         } else {

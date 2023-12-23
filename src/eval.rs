@@ -10,30 +10,30 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub enum SemCtxMap {
+pub(crate) enum SemCtxMap {
     LabelN(Tree<TermN>),
     SubN(Vec<TermN>),
 }
 
 #[derive(Clone, Debug)]
-pub struct SemCtx {
+pub(crate) struct SemCtx {
     map: SemCtxMap,
     ty: TypeN,
 }
 
 impl SemCtx {
-    pub fn new(map: SemCtxMap, ty: TypeN) -> Self {
+    pub(crate) fn new(map: SemCtxMap, ty: TypeN) -> Self {
         SemCtx { map, ty }
     }
 
-    pub fn id(ctx: &CtxT) -> Self {
+    pub(crate) fn id(ctx: &CtxT) -> Self {
         match ctx {
             CtxT::Tree(tr) => Self::id_tree(tr),
             CtxT::Ctx(c) => Self::id_vec(c.len()),
         }
     }
 
-    pub fn id_tree<T>(positions: &Tree<T>) -> Self {
+    pub(crate) fn id_tree<T>(positions: &Tree<T>) -> Self {
         SemCtx::new(
             SemCtxMap::LabelN(
                 positions
@@ -44,14 +44,14 @@ impl SemCtx {
         )
     }
 
-    pub fn id_vec(len: usize) -> Self {
+    pub(crate) fn id_vec(len: usize) -> Self {
         SemCtx::new(
             SemCtxMap::SubN((0..len).map(|i| TermN::Variable(Pos::Level(i))).collect()),
             TypeN::base(),
         )
     }
 
-    pub fn get(&self, pos: &Pos) -> TermN {
+    pub(crate) fn get(&self, pos: &Pos) -> TermN {
         match (&self.map, pos) {
             (SemCtxMap::LabelN(l), Pos::Path(p)) => l.get(p).clone(),
             (SemCtxMap::SubN(s), Pos::Level(l)) => s[*l].clone(),
@@ -59,11 +59,11 @@ impl SemCtx {
         }
     }
 
-    pub fn get_ty(&self) -> TypeN {
+    pub(crate) fn get_ty(&self) -> TypeN {
         self.ty.clone()
     }
 
-    pub fn restrict(self) -> Self {
+    pub(crate) fn restrict(self) -> Self {
         if let SemCtxMap::LabelN(l) = self.map {
             let mut ty = self.ty;
             let (s, t) = l.elements.into_iter().next_tuple().unwrap();
@@ -77,7 +77,7 @@ impl SemCtx {
         }
     }
 
-    pub fn include(self, rng: &RangeInclusive<usize>) -> Self {
+    pub(crate) fn include(self, rng: &RangeInclusive<usize>) -> Self {
         if let SemCtxMap::LabelN(mut l) = self.map {
             let map = SemCtxMap::LabelN(Tree {
                 elements: l.elements.drain(rng.clone()).collect(),
@@ -90,7 +90,7 @@ impl SemCtx {
         }
     }
 
-    pub fn to_args(self) -> (Tree<TermN>, usize) {
+    pub(crate) fn to_args(self) -> (Tree<TermN>, usize) {
         let SemCtxMap::LabelN(args) = self.map else {
 	    panic!("Non tree sem ctx converted to args")
 	};
@@ -102,7 +102,7 @@ impl SemCtx {
 }
 
 impl Tree<TermN> {
-    pub fn unrestrict(mut self, ty: TypeN) -> Self {
+    pub(crate) fn unrestrict(mut self, ty: TypeN) -> Self {
         for (s, t) in ty.0.into_iter().rev() {
             self = Tree {
                 elements: vec![s, t],
@@ -113,7 +113,7 @@ impl Tree<TermN> {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn find_insertion_redex(
+    pub(crate) fn find_insertion_redex(
         &self,
         insertion: &Insertion,
     ) -> Option<(Path, Tree<NoDispOption<Name>>, Tree<TermN>)> {
@@ -198,7 +198,7 @@ fn eval_coh(
 }
 
 impl TermT {
-    pub fn eval(&self, ctx: &SemCtx, env: &Environment) -> TermN {
+    pub(crate) fn eval(&self, ctx: &SemCtx, env: &Environment) -> TermN {
         match self {
             TermT::App(t, awt) => {
                 let sem_ctx = awt.eval(ctx, env);
@@ -219,7 +219,7 @@ impl TermT {
 }
 
 impl TypeT {
-    pub fn eval(&self, ctx: &SemCtx, env: &Environment) -> TypeN {
+    pub(crate) fn eval(&self, ctx: &SemCtx, env: &Environment) -> TypeN {
         match &self {
             TypeT::Base => ctx.get_ty().clone(),
             TypeT::Arr(s, a, t) => {
@@ -234,13 +234,13 @@ impl TypeT {
 }
 
 impl ArgsWithTypeT {
-    pub fn eval(&self, ctx: &SemCtx, env: &Environment) -> SemCtx {
+    pub(crate) fn eval(&self, ctx: &SemCtx, env: &Environment) -> SemCtx {
         self.args.eval(&self.ty, ctx, env)
     }
 }
 
 impl ArgsT {
-    pub fn eval(&self, ty: &TypeT, ctx: &SemCtx, env: &Environment) -> SemCtx {
+    pub(crate) fn eval(&self, ty: &TypeT, ctx: &SemCtx, env: &Environment) -> SemCtx {
         match self {
             ArgsT::Sub(ts) => {
                 let map = SemCtxMap::SubN(ts.iter().map(|t| t.eval(ctx, env)).collect());
@@ -258,7 +258,7 @@ impl ArgsT {
 }
 
 impl HeadN {
-    pub fn quote(&self) -> TermT {
+    pub(crate) fn quote(&self) -> TermT {
         match self {
             HeadN::CohN { tree, ty } => TermT::Coh(tree.clone(), Box::new(ty.quote())),
             HeadN::UCohN { tree } => TermT::UComp(tree.clone()),
@@ -268,7 +268,7 @@ impl HeadN {
 }
 
 impl TermN {
-    pub fn quote(&self) -> TermT {
+    pub(crate) fn quote(&self) -> TermT {
         match self {
             TermN::Variable(x) => TermT::Var(x.clone()),
             TermN::Other(head, args) => TermT::App(
@@ -283,7 +283,7 @@ impl TermN {
 }
 
 impl TypeNRef {
-    pub fn quote(&self) -> TypeT {
+    pub(crate) fn quote(&self) -> TypeT {
         let mut ret = TypeT::Base;
 
         for (s, t) in &self.0 {
@@ -295,7 +295,7 @@ impl TypeNRef {
 }
 
 impl LabelT {
-    pub fn unbiased(tree: Tree<NoDispOption<Name>>, d: usize) -> LabelT {
+    pub(crate) fn unbiased(tree: Tree<NoDispOption<Name>>, d: usize) -> LabelT {
         let mut ty = tree.unbiased_type(d);
         let mut tr = Tree::singleton(tree.unbiased_comp(d));
         while let TypeT::Arr(s, a, t) = ty {
@@ -308,7 +308,7 @@ impl LabelT {
         tr
     }
 
-    pub fn exterior_sub<T>(
+    pub(crate) fn exterior_sub<T>(
         outer: &Tree<T>,
         mut bp: Path,
         inner: &Tree<NoDispOption<Name>>,

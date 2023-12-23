@@ -7,7 +7,7 @@ use pretty::RcDoc;
 use crate::term::{TermT, TypeT};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Name(pub String);
+pub struct Name(pub(crate) String);
 
 impl<'a> From<&'a str> for Name {
     fn from(value: &'a str) -> Self {
@@ -33,7 +33,7 @@ impl Display for Name {
 
 #[derive(Clone, Debug, Derivative)]
 #[derivative(Default(bound = ""))]
-pub struct NoDispOption<T>(pub Option<T>);
+pub struct NoDispOption<T>(pub(crate) Option<T>);
 
 impl<T: ToDoc> ToDoc for NoDispOption<T> {
     fn to_doc(&self) -> RcDoc<'_> {
@@ -62,7 +62,7 @@ impl<T> PartialEq for NoDispOption<T> {
 impl<T> Eq for NoDispOption<T> {}
 
 #[derive(Clone, Debug)]
-pub struct Spanned<T, S>(pub T, pub S);
+pub struct Spanned<T, S>(pub(crate) T, pub(crate) S);
 
 impl<T: ToDoc, S> ToDoc for Spanned<T, S> {
     fn to_doc(&self) -> RcDoc<'_> {
@@ -86,12 +86,12 @@ impl<T: Eq, S> Eq for Spanned<T, S> {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Tree<T> {
-    pub elements: Vec<T>,
-    pub branches: Vec<Tree<T>>,
+    pub(crate) elements: Vec<T>,
+    pub(crate) branches: Vec<Tree<T>>,
 }
 
 impl<T> Tree<T> {
-    pub fn get(&self, p: &Path) -> &T {
+    pub(crate) fn get(&self, p: &Path) -> &T {
         let mut tr = self;
         for x in p.path.iter().rev() {
             tr = &tr.branches[*x];
@@ -99,12 +99,12 @@ impl<T> Tree<T> {
         &tr.elements[p.here]
     }
 
-    pub fn is_disc(&self) -> bool {
+    pub(crate) fn is_disc(&self) -> bool {
         self.branches.is_empty() || (self.branches.len() == 1 && self.branches[0].is_disc())
     }
 
     /// Get the unique maximal element if there is one
-    pub fn get_max(&self) -> Option<&T> {
+    pub(crate) fn get_max(&self) -> Option<&T> {
         match self.branches.len() {
             0 => Some(&self.elements[0]),
             1 => self.branches[0].get_max(),
@@ -112,7 +112,7 @@ impl<T> Tree<T> {
         }
     }
 
-    pub fn dim(&self) -> usize {
+    pub(crate) fn dim(&self) -> usize {
         self.branches
             .iter()
             .map(|br| br.dim())
@@ -121,7 +121,7 @@ impl<T> Tree<T> {
             .unwrap_or_default()
     }
 
-    pub fn bdry_set(&self, n: usize, src: bool) -> Vec<&T> {
+    pub(crate) fn bdry_set(&self, n: usize, src: bool) -> Vec<&T> {
         if n == 0 {
             if src {
                 vec![self.elements.first().unwrap()]
@@ -136,7 +136,7 @@ impl<T> Tree<T> {
         }
     }
 
-    pub fn get_maximal_elements(&self) -> Vec<&T> {
+    pub(crate) fn get_maximal_elements(&self) -> Vec<&T> {
         if self.branches.is_empty() {
             vec![self.elements.last().unwrap().clone()]
         } else {
@@ -147,7 +147,7 @@ impl<T> Tree<T> {
         }
     }
 
-    pub fn get_maximal_paths(&self) -> Vec<Path> {
+    pub(crate) fn get_maximal_paths(&self) -> Vec<Path> {
         if self.branches.is_empty() {
             vec![Path::here(0)]
         } else {
@@ -159,7 +159,7 @@ impl<T> Tree<T> {
         }
     }
 
-    pub fn get_maximal_with_branching(&self) -> Vec<(Path, usize, &T)> {
+    pub(crate) fn get_maximal_with_branching(&self) -> Vec<(Path, usize, &T)> {
         if self.branches.is_empty() {
             vec![(Path::here(0), 0, &self.elements[0])]
         } else {
@@ -181,7 +181,7 @@ impl<T> Tree<T> {
         }
     }
 
-    pub fn get_paths(&self) -> Vec<(Path, &T)> {
+    pub(crate) fn get_paths(&self) -> Vec<(Path, &T)> {
         self.elements
             .iter()
             .enumerate()
@@ -194,14 +194,14 @@ impl<T> Tree<T> {
             .collect()
     }
 
-    pub fn singleton(i: T) -> Self {
+    pub(crate) fn singleton(i: T) -> Self {
         Tree {
             elements: vec![i],
             branches: vec![],
         }
     }
 
-    pub fn label_from_max<S>(
+    pub(crate) fn label_from_max<S>(
         &self,
         iter: &mut impl Iterator<Item = S>,
     ) -> Option<Tree<NoDispOption<S>>> {
@@ -219,7 +219,7 @@ impl<T> Tree<T> {
         Some(Tree { elements, branches })
     }
 
-    pub fn map_ref<U, S>(&self, f: &U) -> Tree<S>
+    pub(crate) fn map_ref<U, S>(&self, f: &U) -> Tree<S>
     where
         U: Fn(&T) -> S,
     {
@@ -228,7 +228,7 @@ impl<T> Tree<T> {
         Tree { branches, elements }
     }
 
-    pub fn map<U, S>(self, f: &U) -> Tree<S>
+    pub(crate) fn map<U, S>(self, f: &U) -> Tree<S>
     where
         U: Fn(T) -> S,
     {
@@ -237,7 +237,7 @@ impl<T> Tree<T> {
         Tree { branches, elements }
     }
 
-    pub fn path_tree(&self) -> Tree<Path> {
+    pub(crate) fn path_tree(&self) -> Tree<Path> {
         let elements = (0..self.elements.len()).map(Path::here).collect();
         let branches = self
             .branches
@@ -249,7 +249,7 @@ impl<T> Tree<T> {
         Tree { elements, branches }
     }
 
-    pub fn susp(self) -> Self
+    pub(crate) fn susp(self) -> Self
     where
         T: Default,
     {
@@ -259,7 +259,7 @@ impl<T> Tree<T> {
         }
     }
 
-    pub fn lookup(&self, p: &Path) -> Option<&T> {
+    pub(crate) fn lookup(&self, p: &Path) -> Option<&T> {
         let mut tr = self;
         for x in p.path.iter().rev() {
             tr = tr.branches.get(*x)?;
@@ -267,7 +267,7 @@ impl<T> Tree<T> {
         tr.elements.get(p.here)
     }
 
-    pub fn insertion(&mut self, mut bp: Path, inner: Tree<T>) {
+    pub(crate) fn insertion(&mut self, mut bp: Path, inner: Tree<T>) {
         match bp.path.pop() {
             Some(i) => {
                 self.branches[i].insertion(bp, inner.branches.into_iter().next().unwrap());
@@ -279,7 +279,7 @@ impl<T> Tree<T> {
         }
     }
 
-    pub fn unwrap_disc(self) -> T {
+    pub(crate) fn unwrap_disc(self) -> T {
         if self.branches.is_empty() {
             self.elements.into_iter().next().unwrap()
         } else {
@@ -287,7 +287,7 @@ impl<T> Tree<T> {
         }
     }
 
-    pub fn bdry(&self, d: usize, tgt: bool) -> Tree<T>
+    pub(crate) fn bdry(&self, d: usize, tgt: bool) -> Tree<T>
     where
         T: Clone,
     {
@@ -305,7 +305,7 @@ impl<T> Tree<T> {
         }
     }
 
-    pub fn has_trunk_height(&self, height: usize) -> bool {
+    pub(crate) fn has_trunk_height(&self, height: usize) -> bool {
         height == 0
             || self
                 .branches
@@ -316,7 +316,7 @@ impl<T> Tree<T> {
 }
 
 impl<T: Default> Tree<T> {
-    pub fn disc(n: usize) -> Self {
+    pub(crate) fn disc(n: usize) -> Self {
         if n == 0 {
             Tree::singleton(T::default())
         } else {
@@ -326,36 +326,12 @@ impl<T: Default> Tree<T> {
             }
         }
     }
-
-    pub fn whisk_right(&mut self, codim: usize, dim: usize) -> Option<()> {
-        if codim == 0 {
-            if dim < 1 {
-                return None;
-            }
-            self.branches.push(Tree::disc(dim - 1));
-            self.elements.push(T::default());
-        } else {
-            self.branches.last_mut()?.whisk_right(codim - 1, dim - 1)?;
-        }
-        Some(())
-    }
-
-    pub fn from_usizes(v: &[usize]) -> Option<Self> {
-        let mut tree = Self::disc(*v.first()?);
-
-        for c in &v[1..].iter().chunks(2) {
-            let (codim, dim) = c.collect_tuple()?;
-            tree.whisk_right(*codim, *dim)?;
-        }
-
-        Some(tree)
-    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Path {
-    pub here: usize,
-    pub path: Vec<usize>,
+    pub(crate) here: usize,
+    pub(crate) path: Vec<usize>,
 }
 
 impl Display for Path {
@@ -368,31 +344,19 @@ impl Display for Path {
 }
 
 impl Path {
-    pub fn susp(self) -> Self {
-        self.extend(0)
-    }
-
-    pub fn de_susp(mut self, d: usize) -> Self {
-        for _ in 0..d {
-            self.path.pop();
-        }
-
-        self
-    }
-
-    pub fn here(n: usize) -> Self {
+    pub(crate) fn here(n: usize) -> Self {
         Path {
             here: n,
             path: vec![],
         }
     }
 
-    pub fn extend(mut self, n: usize) -> Path {
+    pub(crate) fn extend(mut self, n: usize) -> Path {
         self.path.push(n);
         self
     }
 
-    pub fn to_type(&self) -> TypeT {
+    pub(crate) fn to_type(&self) -> TypeT {
         let mut ty = TypeT::Base;
         let mut current_path = vec![];
 
@@ -418,7 +382,7 @@ impl Path {
         ty
     }
 
-    pub fn fst_mut(&mut self) -> &mut usize {
+    pub(crate) fn fst_mut(&mut self) -> &mut usize {
         self.path.last_mut().unwrap_or(&mut self.here)
     }
 }
@@ -427,22 +391,6 @@ impl Path {
 pub enum Pos {
     Level(usize),
     Path(Path),
-}
-
-impl Pos {
-    pub fn susp(self) -> Self {
-        match self {
-            Pos::Level(l) => Pos::Level(l + 2),
-            Pos::Path(p) => Pos::Path(p.susp()),
-        }
-    }
-
-    pub fn de_susp(self) -> Self {
-        match self {
-            Pos::Level(l) => Pos::Level(l - 2),
-            Pos::Path(p) => Pos::Path(p.de_susp(1)),
-        }
-    }
 }
 
 impl Display for Pos {

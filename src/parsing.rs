@@ -10,7 +10,7 @@ use crate::{
     syntax::{Args, ArgsWithType, Ctx, Term, Type},
 };
 
-pub fn comment() -> impl Parser<char, (), Error = Simple<char>> + Clone {
+pub(crate) fn comment() -> impl Parser<char, (), Error = Simple<char>> + Clone {
     whitespace()
         .separated_by(just("//").ignore_then(newline().not().repeated()))
         .to(())
@@ -68,7 +68,7 @@ where
     }))
 }
 
-pub fn ident() -> impl Parser<char, Name, Error = Simple<char>> + Clone {
+pub(crate) fn ident() -> impl Parser<char, Name, Error = Simple<char>> + Clone {
     text::ident().try_map(|x, span| {
         if x == "coh" || x == "ucomp" || x == "def" || x == "_" {
             Err(Simple::custom(
@@ -174,7 +174,7 @@ where
         .map(Ctx::Other))
 }
 
-pub fn term() -> impl Parser<char, Term<Range<usize>>, Error = Simple<char>> + Clone {
+pub(crate) fn term() -> impl Parser<char, Term<Range<usize>>, Error = Simple<char>> + Clone {
     recursive(|term| {
         atom(term.clone())
             .map_with_span(|t, sp| (t, sp.start()))
@@ -191,10 +191,10 @@ pub fn term() -> impl Parser<char, Term<Range<usize>>, Error = Simple<char>> + C
     })
 }
 
-pub fn ty() -> impl Parser<char, Type<Range<usize>>, Error = Simple<char>> {
+pub(crate) fn ty() -> impl Parser<char, Type<Range<usize>>, Error = Simple<char>> {
     ty_internal(term())
 }
 
-pub fn ctx() -> impl Parser<char, Ctx<Range<usize>>, Error = Simple<char>> {
+pub(crate) fn ctx() -> impl Parser<char, Ctx<Range<usize>>, Error = Simple<char>> {
     ctx_internal(term())
 }

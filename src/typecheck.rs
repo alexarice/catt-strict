@@ -15,13 +15,13 @@ use crate::{
     term::{ArgsT, ArgsWithTypeT, CtxT, LabelT, TermT, TypeT},
 };
 
-pub struct Local {
-    pub ctx: CtxT,
-    pub map: HashMap<Name, (Pos, TypeT)>,
+pub(crate) struct Local {
+    pub(crate) ctx: CtxT,
+    pub(crate) map: HashMap<Name, (Pos, TypeT)>,
 }
 
 impl Tree<NoDispOption<Name>> {
-    pub fn to_map(&self) -> Local {
+    pub(crate) fn to_map(&self) -> Local {
         let pairs = self.get_paths();
         let map = pairs
             .into_iter()
@@ -130,7 +130,7 @@ impl TypeCheckError<Range<usize>> {
             | TypeCheckError::TermNotTree(tm, _) => tm.span(),
         }
     }
-    pub fn to_report<Id>(self, src: &Id) -> Report<'static, (Id, Range<usize>)>
+    pub(crate) fn to_report<Id>(self, src: &Id) -> Report<'static, (Id, Range<usize>)>
     where
         Id: Debug + Hash + PartialEq + Eq + Clone,
     {
@@ -274,7 +274,10 @@ impl TypeCheckError<Range<usize>> {
 }
 
 impl<S: Clone + Debug> Term<S> {
-    pub fn infer(&self, env: &Environment) -> Result<(CtxT, TermT, TypeT), TypeCheckError<S>> {
+    pub(crate) fn infer(
+        &self,
+        env: &Environment,
+    ) -> Result<(CtxT, TermT, TypeT), TypeCheckError<S>> {
         match self {
             Term::Hole(sp) => Err(TypeCheckError::Hole(sp.clone())),
             Term::Susp(t, _) => {
@@ -317,7 +320,7 @@ impl<S: Clone + Debug> Term<S> {
         }
     }
 
-    pub fn check(
+    pub(crate) fn check(
         &self,
         env: &Environment,
         local: &Local,
@@ -450,7 +453,7 @@ impl<S: Clone + Debug> Term<S> {
 }
 
 impl<S: Clone + Debug> Type<S> {
-    pub fn infer(
+    pub(crate) fn infer(
         &self,
         env: &Environment,
         local: &Local,
@@ -498,7 +501,7 @@ impl<S: Clone + Debug> Type<S> {
         }
     }
 
-    pub fn check(
+    pub(crate) fn check(
         &self,
         env: &Environment,
         local: &Local,
@@ -559,7 +562,7 @@ impl<S: Clone + Debug> Label<S> {
         })
     }
 
-    pub fn infer(
+    pub(crate) fn infer(
         &self,
         env: &Environment,
         local: &Local,
@@ -628,7 +631,7 @@ impl<S: Clone + Debug> Label<S> {
 }
 
 impl<S: Clone + Debug> Ctx<S> {
-    pub fn check(&self, env: &Environment) -> Result<Local, TypeCheckError<S>> {
+    pub(crate) fn check(&self, env: &Environment) -> Result<Local, TypeCheckError<S>> {
         match self {
             Ctx::Tree(tr) => Ok(tr.to_map()),
             Ctx::Other(ctx) => {

@@ -10,7 +10,7 @@ use crate::{
 
 #[derive(Clone, Debug, Eq, Derivative)]
 #[derivative(PartialEq)]
-pub enum HeadN {
+pub(crate) enum HeadN {
     CohN {
         tree: Tree<NoDispOption<Name>>,
         ty: TypeN,
@@ -24,17 +24,17 @@ pub enum HeadN {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TermN {
+pub(crate) enum TermN {
     Variable(Pos),
     Other(HeadN, Tree<TermN>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TypeN(pub Vec<(TermN, TermN)>);
+pub(crate) struct TypeN(pub(crate) Vec<(TermN, TermN)>);
 
 #[derive(Debug, PartialEq, Eq, RefCast)]
 #[repr(transparent)]
-pub struct TypeNRef(pub [(TermN, TermN)]);
+pub(crate) struct TypeNRef(pub(crate) [(TermN, TermN)]);
 
 impl Deref for TypeN {
     type Target = TypeNRef;
@@ -44,34 +44,8 @@ impl Deref for TypeN {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum CtxN {
-    Ctx(Vec<TypeN>),
-    Tree(Tree<NoDispOption<Name>>),
-}
-
-impl HeadN {
-    pub fn susp(self) -> HeadN {
-        match self {
-            HeadN::CohN { tree, ty } => HeadN::CohN {
-                tree: tree.susp(),
-                ty: ty.susp(),
-            },
-            HeadN::UCohN { tree } => HeadN::UCohN { tree: tree.susp() },
-            HeadN::IdN { dim } => HeadN::IdN { dim: dim + 1 },
-        }
-    }
-}
-
 impl TermN {
-    pub fn susp(self) -> TermN {
-        match self {
-            TermN::Variable(p) => TermN::Variable(p.susp()),
-            TermN::Other(head, args) => TermN::Other(head.susp(), args.susp_args()),
-        }
-    }
-
-    pub fn to_args(self, ty: TypeN) -> Tree<TermN> {
+    pub(crate) fn to_args(self, ty: TypeN) -> Tree<TermN> {
         ty.0.into_iter()
             .rfold(Tree::singleton(self), |tr, (s, t)| Tree {
                 elements: vec![s, t],
@@ -79,7 +53,7 @@ impl TermN {
             })
     }
 
-    pub fn free_vars(&self, set: &mut HashSet<Path>) {
+    pub(crate) fn free_vars(&self, set: &mut HashSet<Path>) {
         match self {
             TermN::Variable(Pos::Path(p)) => {
                 set.insert(p.clone());
@@ -95,24 +69,15 @@ impl TermN {
 }
 
 impl TypeN {
-    pub fn base() -> TypeN {
+    pub(crate) fn base() -> TypeN {
         TypeN(vec![])
     }
 
-    pub fn dim(&self) -> usize {
+    pub(crate) fn dim(&self) -> usize {
         self.0.len()
     }
 
-    pub fn susp(self) -> TypeN {
-        let mut base = vec![(
-            TermN::Variable(Pos::Path(Path::here(0))),
-            TermN::Variable(Pos::Path(Path::here(1))),
-        )];
-        base.extend(self.0.into_iter().map(|(s, t)| (s.susp(), t.susp())));
-        TypeN(base)
-    }
-
-    pub fn free_vars(self) -> HashSet<Path> {
+    pub(crate) fn free_vars(self) -> HashSet<Path> {
         let mut set = HashSet::new();
         for (s, t) in self.0 {
             s.free_vars(&mut set);
@@ -121,7 +86,7 @@ impl TypeN {
         set
     }
 
-    pub fn support_check<T>(mut self, tree: &Tree<T>, support: &Support) -> bool {
+    pub(crate) fn support_check<T>(mut self, tree: &Tree<T>, support: &Support) -> bool {
         match support {
             Support::FullInverse => {
                 if let Some((s, t)) = self.0.pop() {
@@ -192,20 +157,8 @@ impl TypeN {
     }
 }
 
-impl Tree<TermN> {
-    fn susp_args(self) -> Self {
-        Tree {
-            elements: vec![
-                TermN::Variable(Pos::Path(Path::here(0))),
-                TermN::Variable(Pos::Path(Path::here(1))),
-            ],
-            branches: vec![self.map(&|tm| tm.susp())],
-        }
-    }
-}
-
 impl TypeNRef {
-    pub fn inner(&self) -> &Self {
+    pub(crate) fn inner(&self) -> &Self {
         TypeNRef::ref_cast(&self.0[0..self.0.len() - 1])
     }
 }
