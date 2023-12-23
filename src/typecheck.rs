@@ -5,6 +5,7 @@ use std::{collections::HashMap, ops::Range};
 use ariadne::{Color, Fmt, Report, ReportKind, Span};
 use thiserror::Error;
 
+use crate::common::Path;
 use crate::normal::TypeNRef;
 use crate::{
     common::{Name, NoDispOption, Pos, Spanned, Tree},
@@ -39,6 +40,7 @@ impl Tree<NoDispOption<Name>> {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Insertion {
     Pruning,
     Full,
@@ -74,6 +76,8 @@ pub enum TypeCheckError<S> {
     CannotInferCtx(Term<S>),
     #[error("Cannot check context for inferrable term \"{}\"", .0.fg(Color::Red))]
     CannotCheckCtx(Term<S>),
+    #[error("Identity does not exist in context \"{}\"", .1.fg(Color::Red))]
+    IdNotDisc(S, Tree<NoDispOption<Name>>),
     #[error("Type {} is not checkable", .0.fg(Color::Red))]
     CannotCheck(Type<S>),
     #[error("Terms {} and {} do not have matching types", .0.fg(Color::Blue), .2.fg(Color::Magenta))]
@@ -112,7 +116,8 @@ impl TypeCheckError<Range<usize>> {
             | TypeCheckError::LabelMismatch(_, _, _, s)
             | TypeCheckError::DimensionMismatch(_, s)
             | TypeCheckError::LocallyMaxMissing(_, s)
-            | TypeCheckError::Hole(s) => s,
+            | TypeCheckError::Hole(s)
+            | TypeCheckError::IdNotDisc(s, _) => s,
             TypeCheckError::Fullness(ty)
             | TypeCheckError::TypeMismatch(ty, _)
             | TypeCheckError::CannotCheck(ty) => ty.span(),
@@ -156,6 +161,11 @@ impl TypeCheckError<Range<usize>> {
             TypeCheckError::CannotCheckCtx(tm) => report.add_label(
                 ariadne::Label::new((src.clone(), tm.span().clone()))
                     .with_message("Context cannot be checked")
+                    .with_color(Color::Red),
+            ),
+            TypeCheckError::IdNotDisc(sp, _) => report.add_label(
+                ariadne::Label::new((src.clone(), sp))
+                    .with_message("id can only occur in disc contexts")
                     .with_color(Color::Red),
             ),
             TypeCheckError::CannotCheck(ty) => report.add_label(
@@ -294,6 +304,15 @@ impl<S: Clone + Debug> Term<S> {
                     tyt,
                 ))
             }
+            Term::Id(_) => Ok((
+                CtxT::Tree(Tree::singleton(NoDispOption(None))),
+                TermT::IdT(0),
+                TypeT::Arr(
+                    TermT::Var(Pos::Path(Path::here(0))),
+                    Box::new(TypeT::Base),
+                    TermT::Var(Pos::Path(Path::here(0))),
+                ),
+            )),
             t => Err(TypeCheckError::CannotInferCtx(t.clone())),
         }
     }
@@ -312,8 +331,19 @@ impl<S: Clone + Debug> Term<S> {
                 .ok_or_else(|| TypeCheckError::UnknownLocal(x.clone(), sp.clone())),
             t @ Term::UComp(_) => {
                 if let CtxT::Tree(t) = &local.ctx {
-                    let ty = t.unbiased_type(t.dim());
-                    Ok((TermT::UComp(t.clone(), Box::new(ty.clone())), ty))
+                    Ok((TermT::UComp(t.clone()), t.unbiased_type(t.dim()).quote()))
+                } else {
+                    Err(TypeCheckError::CannotCheckCtx(t.clone()))
+                }
+            }
+            t @ Term::Id(sp) => {
+                if let CtxT::Tree(t) = &local.ctx {
+                    if t.is_disc() {
+                        let d = t.dim();
+                        Ok((TermT::IdT(d), t.unbiased_type(d + 1).quote()))
+                    } else {
+                        Err(TypeCheckError::IdNotDisc(sp.clone(), t.clone()))
+                    }
                 } else {
                     Err(TypeCheckError::CannotCheckCtx(t.clone()))
                 }

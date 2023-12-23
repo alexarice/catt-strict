@@ -19,6 +19,7 @@ pub enum Term<S> {
     Coh(Tree<NoDispOption<Name>>, Box<Type<S>>, S),
     Include(Box<Term<S>>, RangeInclusive<usize>, S),
     UComp(S),
+    Id(S),
     Hole(S),
 }
 
@@ -55,7 +56,8 @@ impl<S> Term<S> {
             | Term::Coh(_, _, s)
             | Term::Include(_, _, s)
             | Term::UComp(s)
-            | Term::Hole(s) => s,
+            | Term::Hole(s)
+            | Term::Id(s) => s,
         }
     }
 }
@@ -121,6 +123,7 @@ impl<S> ToDoc for Term<S> {
             ),
             Term::UComp(_) => RcDoc::group(RcDoc::text("ucomp")),
             Term::Hole(_) => RcDoc::group(RcDoc::text("_")),
+	    Term::Id(_) => RcDoc::text("id"),
         }
     }
 }

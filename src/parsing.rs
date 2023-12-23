@@ -95,6 +95,7 @@ where
         )
         .map_with_span(|(ctx, ty), sp| Term::Coh(ctx, Box::new(ty), sp))
         .or(text::keyword("ucomp").map_with_span(|_, s| Term::UComp(s)))
+        .or(text::keyword("id").map_with_span(|_, s| Term::Id(s)))
         .or(just("_").map_with_span(|_, sp| Term::Hole(sp)))
         .or(ident().map_with_span(Term::Var))
         .or(just("‼")

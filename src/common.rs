@@ -103,6 +103,15 @@ impl<T> Tree<T> {
         self.branches.is_empty() || (self.branches.len() == 1 && self.branches[0].is_disc())
     }
 
+    /// Get the unique maximal element if there is one
+    pub fn get_max(&self) -> Option<&T> {
+        match self.branches.len() {
+            0 => Some(&self.elements[0]),
+            1 => self.branches[0].get_max(),
+            _ => None,
+        }
+    }
+
     pub fn dim(&self) -> usize {
         self.branches
             .iter()
@@ -124,14 +133,6 @@ impl<T> Tree<T> {
                 .iter()
                 .chain(self.branches.iter().flat_map(|br| br.bdry_set(n - 1, src)))
                 .collect()
-        }
-    }
-
-    pub fn susp_level(&self) -> usize {
-        if self.branches.len() == 1 {
-            1 + self.branches[0].susp_level()
-        } else {
-            0
         }
     }
 
@@ -269,7 +270,7 @@ impl<T> Tree<T> {
     pub fn insertion(&mut self, mut bp: Path, inner: Tree<T>) {
         match bp.path.pop() {
             Some(i) => {
-                self.branches[i].insertion(bp, inner);
+                self.branches[i].insertion(bp, inner.branches.into_iter().next().unwrap());
             }
             None => {
                 self.elements.splice(bp.here..bp.here + 2, inner.elements);
@@ -302,6 +303,15 @@ impl<T> Tree<T> {
                 branches: self.branches.iter().map(|br| br.bdry(d - 1, tgt)).collect(),
             }
         }
+    }
+
+    pub fn has_trunk_height(&self, height: usize) -> bool {
+        height == 0
+            || self
+                .branches
+                .iter()
+                .exactly_one()
+                .is_ok_and(|br| br.has_trunk_height(height - 1))
     }
 }
 

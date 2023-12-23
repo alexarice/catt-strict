@@ -10,12 +10,17 @@ use crate::{
 
 #[derive(Clone, Debug, Eq, Derivative)]
 #[derivative(PartialEq)]
-pub struct HeadN {
-    pub tree: Tree<NoDispOption<Name>>,
-    pub ty: TypeN,
-    pub susp: usize,
-    #[derivative(PartialEq = "ignore")]
-    pub ucomp: bool,
+pub enum HeadN {
+    CohN {
+        tree: Tree<NoDispOption<Name>>,
+        ty: TypeN,
+    },
+    UCohN {
+        tree: Tree<NoDispOption<Name>>,
+    },
+    IdN {
+        dim: usize,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -45,49 +50,24 @@ pub enum CtxN {
     Tree(Tree<NoDispOption<Name>>),
 }
 
+impl HeadN {
+    pub fn susp(self) -> HeadN {
+        match self {
+            HeadN::CohN { tree, ty } => HeadN::CohN {
+                tree: tree.susp(),
+                ty: ty.susp(),
+            },
+            HeadN::UCohN { tree } => HeadN::UCohN { tree: tree.susp() },
+            HeadN::IdN { dim } => HeadN::IdN { dim: dim + 1 },
+        }
+    }
+}
+
 impl TermN {
-    fn susp_level(&self) -> usize {
-        match self {
-            TermN::Variable(Pos::Path(p)) => p.path.len(),
-            TermN::Variable(Pos::Level(_)) => 0,
-            TermN::Other(h, a) => std::cmp::min(
-                h.susp,
-                a.get_maximal_elements()
-                    .iter()
-                    .map(|t| t.susp_level())
-                    .min()
-                    .unwrap(),
-            ),
-        }
-    }
-
-    fn de_susp_int(self, d: usize) -> TermN {
-        match self {
-            TermN::Variable(Pos::Path(p)) => TermN::Variable(Pos::Path(p.de_susp(d))),
-            TermN::Variable(Pos::Level(_)) => unreachable!(),
-            TermN::Other(h, a) => {
-                let mut head = h;
-                head.susp -= d;
-
-                let mut args = a;
-                for _ in 0..d {
-                    args = args.branches.remove(0);
-                }
-
-                args = args.map(&|tm| tm.de_susp_int(d));
-
-                TermN::Other(head, args)
-            }
-        }
-    }
-
     pub fn susp(self) -> TermN {
         match self {
             TermN::Variable(p) => TermN::Variable(p.susp()),
-            TermN::Other(mut head, args) => {
-                head.susp += 1;
-                TermN::Other(head, args.susp_args())
-            }
+            TermN::Other(head, args) => TermN::Other(head.susp(), args.susp_args()),
         }
     }
 
@@ -121,31 +101,6 @@ impl TypeN {
 
     pub fn dim(&self) -> usize {
         self.0.len()
-    }
-
-    fn susp_level(&self) -> usize {
-        match self.0.last() {
-            Some((s, t)) => std::cmp::min(s.susp_level(), t.susp_level()),
-            None => 0,
-        }
-    }
-
-    fn de_susp_int(self, d: usize) -> TypeN {
-        TypeN(
-            self.0
-                .into_iter()
-                .skip(d)
-                .map(|(s, t)| (s.de_susp_int(d), t.de_susp_int(d)))
-                .collect(),
-        )
-    }
-
-    pub fn de_susp(self, max: usize) -> (TypeN, usize) {
-        let d = std::cmp::min(max, self.susp_level());
-
-        let ty = if d == 0 { self } else { self.de_susp_int(d) };
-
-        (ty, d)
     }
 
     pub fn susp(self) -> TypeN {
@@ -205,6 +160,67 @@ impl TypeN {
             }
             Support::NoInverse => true,
         }
+    }
+
+    pub(crate) fn is_unbiased<T>(&self, tree: &Tree<T>) -> bool {
+        if let Some((s, t)) = self.0.last() {
+            let path_tree = tree.path_tree().map(&|p| TermN::Variable(Pos::Path(p)));
+            let dim = tree.dim();
+            let src = path_tree.bdry(dim - 1, false);
+            let src_correct = if let Some(x) = src.get_max() {
+                s == x
+            } else if let TermN::Other(HeadN::UCohN { .. }, args) = s {
+                args == &src
+            } else {
+                false
+            };
+            if !src_correct {
+                return false;
+            }
+            let tgt = path_tree.bdry(dim - 1, true);
+            let tgt_correct = if let Some(x) = tgt.get_max() {
+                s == x
+            } else if let TermN::Other(HeadN::UCohN { .. }, args) = t {
+                args == &tgt
+            } else {
+                false
+            };
+            tgt_correct
+        } else {
+            true
+        }
+    }
+}
+
+impl Tree<NoDispOption<Name>> {
+    pub fn unbiased_type(&self, d: usize) -> TypeN {
+        let ptree = self.path_tree().map(&|p| TermN::Variable(Pos::Path(p)));
+        let inner = (0..d)
+            .map(|x| {
+                let src_args = ptree.bdry(x, false);
+                let tgt_args = ptree.bdry(x, true);
+                if src_args.is_disc() {
+                    (src_args.unwrap_disc(), tgt_args.unwrap_disc())
+                } else {
+                    (
+                        TermN::Other(
+                            HeadN::UCohN {
+                                tree: self.bdry(x, false),
+                            },
+                            src_args,
+                        ),
+                        TermN::Other(
+                            HeadN::UCohN {
+                                tree: self.bdry(x, true),
+                            },
+                            tgt_args,
+                        ),
+                    )
+                }
+            })
+            .collect();
+
+        TypeN(inner)
     }
 }
 
