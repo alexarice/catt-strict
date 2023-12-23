@@ -123,7 +123,7 @@ impl<S> ToDoc for Term<S> {
             ),
             Term::UComp(_) => RcDoc::group(RcDoc::text("ucomp")),
             Term::Hole(_) => RcDoc::group(RcDoc::text("_")),
-	    Term::Id(_) => RcDoc::text("id"),
+            Term::Id(_) => RcDoc::text("id"),
         }
     }
 }

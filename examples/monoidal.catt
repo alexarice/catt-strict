@@ -4,25 +4,25 @@ def comp [f,g] = ucomp
 
 normalise [f,g,h] | comp(comp(f,g),h)
 
-// def horiz [[a],[b]] = ucomp
+def horiz [[a],[b]] = ucomp
 
-// def unitor_l = coh [ {x{f}y} : comp(id(x),f) -> f ]
+def unitor_l = coh [ {x{f}y} : comp(id(x),f) -> f ]
 
-// def unitor_r = coh [ {x{f}y} : comp(f, id(y)) -> f ]
+def unitor_r = coh [ {x{f}y} : comp(f, id(y)) -> f ]
 
-// def assoc = coh [ {x{f}y{g}z{h}w} : comp(comp(f,g),h) -> comp(f,comp(g,h)) ]
+def assoc = coh [ {x{f}y{g}z{h}w} : comp(comp(f,g),h) -> comp(f,comp(g,h)) ]
 
-// def triangle = coh [ {x{f}y{g}z}
-//                    : comp(assoc(f,id(y),g), horiz(id(f),unitor_l(g)))
-//                      ->
-//                      horiz(unitor_r(f),id(g))
-//                    ]
+def triangle = coh [ {x{f}y{g}z}
+                   : comp(assoc(f,id(y),g), horiz(id(f),unitor_l(g)))
+                     ->
+                     horiz(unitor_r(f),id(g))
+                   ]
 
-// normalise {x{f}y{g}z} | triangle(f,g)
+normalise {x{f}y{g}z} | triangle(f,g)
 
-// def pentagon = coh [ {v{f}w{g}x{h}y{i}z}
-//     	       	   : comp(assoc(comp(f,g),h,i),assoc(f,g,comp(h,i)))
-// 		     ->
-// 		     comp(horiz(assoc(f,g,h),id(i)), comp(assoc(f,comp(g,h),i),horiz(id(f),assoc(g,h,i)))) ]
+def pentagon = coh [ {v{f}w{g}x{h}y{i}z}
+    	       	   : comp(assoc(comp(f,g),h,i),assoc(f,g,comp(h,i)))
+		     ->
+		     comp(horiz(assoc(f,g,h),id(i)), comp(assoc(f,comp(g,h),i),horiz(id(f),assoc(g,h,i)))) ]
 
-// normalise {v{f}w{g}x{h}y{i}z} | pentagon(f,g,h,i)
+normalise {v{f}w{g}x{h}y{i}z} | pentagon(f,g,h,i)

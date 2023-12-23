@@ -90,12 +90,14 @@ impl SemCtx {
         }
     }
 
-    pub fn to_args(self) -> Tree<TermN> {
-	let SemCtxMap::LabelN(args) = self.map else {
+    pub fn to_args(self) -> (Tree<TermN>, usize) {
+        let SemCtxMap::LabelN(args) = self.map else {
 	    panic!("Non tree sem ctx converted to args")
 	};
 
-	args.unrestrict(self.ty)
+        let dim = self.ty.dim();
+
+        (args.unrestrict(self.ty), dim)
     }
 }
 
@@ -132,12 +134,9 @@ fn eval_coh(
     ctx: &SemCtx,
     env: &Environment,
 ) -> TermN {
-    let sem_ty = ctx.get_ty();
-    let dim = sem_ty.dim();
+    let (mut args, dim) = ctx.clone().to_args();
 
     let final_dim = tree.dim() + dim;
-
-    let mut args = ctx.clone().to_args();
 
     for _ in 0..dim {
         tree = tree.susp();
@@ -163,7 +162,10 @@ fn eval_coh(
     }
 
     let tyn = tyt.map_or_else(
-        || tree.unbiased_type(final_dim),
+        || {
+            tree.unbiased_type(final_dim)
+                .eval(&SemCtx::id_tree(&tree), env)
+        },
         |x| x.eval(&SemCtx::id_tree(&tree), env),
     );
 
@@ -173,7 +175,7 @@ fn eval_coh(
 
             let args = s.eval(&sem_ctx, env).to_args(a.eval(&sem_ctx, env));
 
-            return TermN::Other(HeadN::IdN { dim: tyn.dim() }, args);
+            return TermN::Other(HeadN::IdN { dim: tyn.dim() - 1 }, args);
         }
     }
 
@@ -186,11 +188,9 @@ fn eval_coh(
     }
 
     if tyn.is_unbiased(&tree) {
-	println!("Here {tyn:?}");
         if env.reduction.disc_rem && tree.is_disc() {
             return args.unwrap_disc();
         }
-
         return TermN::Other(HeadN::UCohN { tree }, args);
     }
 
@@ -210,7 +210,10 @@ impl TermT {
             TermT::Include(t, rng) => t.eval(&ctx.clone().include(rng), env),
             TermT::UComp(tr) => eval_coh(tr.clone(), None, ctx, env),
             TermT::Coh(tr, ty) => eval_coh(tr.clone(), Some(*ty.clone()), ctx, env),
-	    TermT::IdT(dim) => TermN::Other(HeadN::IdN { dim: *dim }, ctx.clone().to_args())
+            TermT::IdT(dim) => {
+                let (args, res_dim) = ctx.clone().to_args();
+                TermN::Other(HeadN::IdN { dim: res_dim + dim }, args)
+            }
         }
     }
 }
@@ -292,12 +295,17 @@ impl TypeNRef {
 }
 
 impl LabelT {
-    pub fn from_tm_ty(tm: TermT, ty: &TypeN) -> LabelT {
-        ty.0.iter()
-            .rfold(Tree::singleton(tm), |tr, (s, t)| Tree {
-                elements: vec![s.quote(), t.quote()],
+    pub fn unbiased(tree: Tree<NoDispOption<Name>>, d: usize) -> LabelT {
+        let mut ty = tree.unbiased_type(d);
+        let mut tr = Tree::singleton(tree.unbiased_comp(d));
+        while let TypeT::Arr(s, a, t) = ty {
+            tr = Tree {
+                elements: vec![s, t],
                 branches: vec![tr],
-            })
+            };
+            ty = *a;
+        }
+        tr
     }
 
     pub fn exterior_sub<T>(
@@ -326,10 +334,7 @@ impl LabelT {
                 });
 
                 let d = outer.branches[bp.here].dim() + 1;
-
-                let ty = inner.unbiased_type(d);
-                let tm = TermT::Coh(inner.clone(), Box::new(ty.quote()));
-                let inner_args = LabelT::from_tm_ty(tm, &ty)
+                let inner_args = LabelT::unbiased(inner.clone(), d)
                     .map(&|tm| TermT::Include(Box::new(tm), bp.here..=bp.here + inner_size));
                 l.branches.splice(bp.here..bp.here + 1, inner_args.branches);
 

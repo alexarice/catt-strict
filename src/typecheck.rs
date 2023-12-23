@@ -331,7 +331,7 @@ impl<S: Clone + Debug> Term<S> {
                 .ok_or_else(|| TypeCheckError::UnknownLocal(x.clone(), sp.clone())),
             t @ Term::UComp(_) => {
                 if let CtxT::Tree(t) = &local.ctx {
-                    Ok((TermT::UComp(t.clone()), t.unbiased_type(t.dim()).quote()))
+                    Ok((TermT::UComp(t.clone()), t.unbiased_type(t.dim())))
                 } else {
                     Err(TypeCheckError::CannotCheckCtx(t.clone()))
                 }
@@ -340,7 +340,7 @@ impl<S: Clone + Debug> Term<S> {
                 if let CtxT::Tree(t) = &local.ctx {
                     if t.is_disc() {
                         let d = t.dim();
-                        Ok((TermT::IdT(d), t.unbiased_type(d + 1).quote()))
+                        Ok((TermT::IdT(d), t.unbiased_type(d + 1)))
                     } else {
                         Err(TypeCheckError::IdNotDisc(sp.clone(), t.clone()))
                     }
@@ -515,7 +515,8 @@ impl<S: Clone + Debug> Type<S> {
                 let sem_ctx = SemCtx::id(&local.ctx);
                 if !matches!(s, Term::Hole(_)) {
                     let (st, _) = s.check(env, local)?;
-                    if &st.eval(&sem_ctx, env) != sn {
+                    let stn = st.eval(&sem_ctx, env);
+                    if &stn != sn {
                         let x = sn.quote().to_expr(Some(&local.ctx), env.implicits);
                         return Err(TypeCheckError::TermMismatch(s.clone(), x));
                     }

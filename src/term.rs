@@ -3,7 +3,7 @@ use std::ops::RangeInclusive;
 use derivative::Derivative;
 
 use crate::{
-    common::{Name, NoDispOption, Pos, Spanned, Tree},
+    common::{Name, NoDispOption, Path, Pos, Spanned, Tree},
     syntax::{Args, ArgsWithType, Term, Type},
 };
 
@@ -94,7 +94,7 @@ impl TermT {
                 Term::Include(Box::new(tm.to_expr(ctx, with_ict)), rng.clone(), ())
             }
             TermT::UComp(_) => Term::UComp(()),
-	    TermT::IdT(_) => Term::Id(()),
+            TermT::IdT(_) => Term::Id(()),
         }
     }
 }
@@ -168,6 +168,61 @@ impl CtxT {
                 new_ctx.extend(ctx);
                 CtxT::Ctx(new_ctx)
             }
+        }
+    }
+}
+
+impl Tree<NoDispOption<Name>> {
+    pub fn unbiased_comp(self, d: usize) -> TermT {
+        let ty = self.unbiased_type(d);
+        TermT::Coh(self, Box::new(ty))
+    }
+    pub fn unbiased_term(self, d: usize) -> TermT {
+        if d == 0 {
+            if self.branches.is_empty() {
+                TermT::Var(Pos::Path(Path::here(0)))
+            } else {
+                self.unbiased_comp(d)
+            }
+        } else {
+            if self.branches.len() == 1 {
+                TermT::Susp(Box::new(
+                    self.branches
+                        .into_iter()
+                        .next()
+                        .unwrap()
+                        .unbiased_term(d - 1),
+                ))
+            } else {
+                self.unbiased_comp(d)
+            }
+        }
+    }
+
+    pub fn unbiased_type(&self, d: usize) -> TypeT {
+        if d == 0 {
+            TypeT::Base
+        } else {
+            let ptree = self.path_tree().map(&|p| TermT::Var(Pos::Path(p)));
+            let src = self.bdry(d - 1, false);
+            let tgt = self.bdry(d - 1, true);
+            TypeT::Arr(
+                TermT::App(
+                    Box::new(src.unbiased_term(d - 1)),
+                    ArgsWithTypeT {
+                        args: ArgsT::Label(ptree.bdry(d - 1, false)),
+                        ty: Box::new(TypeT::Base),
+                    },
+                ),
+                Box::new(self.unbiased_type(d - 1)),
+                TermT::App(
+                    Box::new(tgt.unbiased_term(d - 1)),
+                    ArgsWithTypeT {
+                        args: ArgsT::Label(ptree.bdry(d - 1, true)),
+                        ty: Box::new(TypeT::Base),
+                    },
+                ),
+            )
         }
     }
 }

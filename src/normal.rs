@@ -179,7 +179,7 @@ impl TypeN {
             }
             let tgt = path_tree.bdry(dim - 1, true);
             let tgt_correct = if let Some(x) = tgt.get_max() {
-                s == x
+                t == x
             } else if let TermN::Other(HeadN::UCohN { .. }, args) = t {
                 args == &tgt
             } else {
@@ -189,38 +189,6 @@ impl TypeN {
         } else {
             true
         }
-    }
-}
-
-impl Tree<NoDispOption<Name>> {
-    pub fn unbiased_type(&self, d: usize) -> TypeN {
-        let ptree = self.path_tree().map(&|p| TermN::Variable(Pos::Path(p)));
-        let inner = (0..d)
-            .map(|x| {
-                let src_args = ptree.bdry(x, false);
-                let tgt_args = ptree.bdry(x, true);
-                if src_args.is_disc() {
-                    (src_args.unwrap_disc(), tgt_args.unwrap_disc())
-                } else {
-                    (
-                        TermN::Other(
-                            HeadN::UCohN {
-                                tree: self.bdry(x, false),
-                            },
-                            src_args,
-                        ),
-                        TermN::Other(
-                            HeadN::UCohN {
-                                tree: self.bdry(x, true),
-                            },
-                            tgt_args,
-                        ),
-                    )
-                }
-            })
-            .collect();
-
-        TypeN(inner)
     }
 }
 
