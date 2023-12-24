@@ -8,15 +8,15 @@ use std::{
 
 use ariadne::{Color, Fmt, Report, ReportKind};
 use chumsky::{prelude::*, primitive::just, text, Parser};
+use either::Either;
 use pretty::RcDoc;
 use thiserror::Error;
 
 use crate::{
-    common::{Name, ToDoc},
-    eval::SemCtx,
+    common::{CtxT, Environment, InferRes, Name, ToDoc},
     parsing::{comment, ctx, ident, term, ty},
     syntax::{Ctx, Term, Type},
-    typecheck::{Environment, TypeCheckError},
+    typecheck::TypeCheckError,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -53,7 +53,7 @@ impl<Id: Debug + Hash + PartialEq + Eq + Clone> CattError<Id> {
     pub fn to_report(self, src: &Id) -> Vec<Report<'static, (Id, Range<usize>)>> {
         let message = self.to_string();
         match self {
-            CattError::TypeCheckError(e) => vec![e.to_report(src)],
+            CattError::TypeCheckError(e) => vec![e.into_report(src)],
             CattError::FileError(_, sp) => {
                 let report = Report::build(ReportKind::Error, src.clone(), sp.start())
                     .with_message(message)
@@ -122,44 +122,68 @@ pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
 impl Command {
     pub fn run(self, env: &mut Environment) -> Result<(), CattError<Src>> {
         println!("----------------------------------------");
-        match self {
-            Command::DefHead(nm, h) => {
-                println!("{} {nm}", "Inferring".fg(Color::Green));
-                let (ctxt, tmt, tyt) = h.infer(env)?;
+
+        macro_rules! printtmty {
+            ($ctx: expr, $tm: expr, $ty: expr) => {
                 println!(
                     "{}",
-                    tmt.to_expr(Some(&ctxt), env.implicits).to_doc().pretty(80)
+                    $tm.to_expr(Some($ctx), env.implicits).to_doc().pretty(80)
                 );
                 println!(
                     "{} {}",
                     "has type".fg(Color::Blue),
-                    tyt.to_expr(Some(&ctxt), env.implicits)
+                    $ty.to_expr(Some($ctx), env.implicits)
                         .to_doc()
                         .nest(9)
                         .pretty(80)
                 );
-                env.top_level.insert(nm, (ctxt, tmt, tyt));
+            };
+        }
+        match self {
+            Command::DefHead(nm, h) => {
+                println!("{} {nm}", "Inferring".fg(Color::Green));
+                let res = h.infer(env)?;
+                match &res {
+                    Either::Left(r) => {
+                        printtmty!(&r.ctx, &r.tm, &r.ty);
+                    }
+                    Either::Right(r) => {
+                        printtmty!(&r.ctx, &r.tm, &r.ty);
+                    }
+                }
+                env.top_level.insert(nm, res);
             }
             Command::DefCtx(nm, ctx, tm) => {
                 println!("{} {nm}", "Checking".fg(Color::Green));
                 let local = ctx.check(env)?;
-                let (tmt, tyt) = tm.check(env, &local)?;
-                println!(
-                    "{}",
-                    tmt.to_expr(Some(&local.ctx), env.implicits)
-                        .to_doc()
-                        .pretty(80)
-                );
-                println!(
-                    "{} {}",
-                    "has type".fg(Color::Blue),
-                    tyt.to_expr(Some(&local.ctx), env.implicits)
-                        .to_doc()
-                        .nest(9)
-                        .pretty(80)
-                );
+                match local {
+                    Either::Left(local) => {
+                        let (tmt, tyt) = tm.check(env, &local)?;
+                        printtmty!(&local.ctx, &tmt, &tyt);
 
-                env.top_level.insert(nm, (local.ctx, tmt, tyt));
+                        env.top_level.insert(
+                            nm,
+                            Either::Left(InferRes {
+                                ctx: local.ctx,
+                                tm: tmt,
+                                ty: tyt,
+                            }),
+                        );
+                    }
+                    Either::Right(local) => {
+                        let (tmt, tyt) = tm.check(env, &local)?;
+                        printtmty!(&local.ctx, &tmt, &tyt);
+
+                        env.top_level.insert(
+                            nm,
+                            Either::Right(InferRes {
+                                ctx: local.ctx,
+                                tm: tmt,
+                                ty: tyt,
+                            }),
+                        );
+                    }
+                }
             }
             Command::DefWT(nm, ctx, ty, tm) => {
                 println!(
@@ -169,53 +193,84 @@ impl Command {
                     ty.to_doc().nest(9).pretty(80)
                 );
                 let local = ctx.check(env)?;
-                let (tmt, tyt) = tm.check(env, &local)?;
-                ty.check(env, &local, &tyt.eval(&SemCtx::id(&local.ctx), env))?;
-                println!(
-                    "{} {}",
-                    "Checked".fg(Color::Blue),
-                    tmt.to_expr(Some(&local.ctx), env.implicits)
-                        .to_doc()
-                        .nest(8)
-                        .pretty(80)
-                );
-                env.top_level.insert(nm, (local.ctx, tmt, tyt));
+                macro_rules! check {
+                    ($l: expr, $p: ident) => {
+                        let (tmt, tyt) = tm.check(env, &$l)?;
+                        ty.check(env, &$l, &tyt.eval(&$l.ctx.id_sem_ctx(), env))?;
+                        println!(
+                            "{} {}",
+                            "Checked".fg(Color::Blue),
+                            tmt.to_expr(Some(&$l.ctx), env.implicits)
+                                .to_doc()
+                                .nest(8)
+                                .pretty(80)
+                        );
+                        let res = InferRes {
+                            ctx: $l.ctx,
+                            tm: tmt,
+                            ty: tyt,
+                        };
+                        env.top_level.insert(nm, Either::$p(res));
+                    };
+                }
+
+                match local {
+                    Either::Left(local) => {
+                        check!(local, Left);
+                    }
+                    Either::Right(local) => {
+                        check!(local, Right);
+                    }
+                }
             }
             Command::Normalise(ctx, tm) => {
                 println!("{} {tm}", "Normalising".fg(Color::Green));
                 let local = ctx.check(env)?;
-                let (tmt, tyt) = tm.check(env, &local)?;
-                let sem_ctx = SemCtx::id(&local.ctx);
-                let tmn = tmt.eval(&sem_ctx, env);
-                let tyn = tyt.eval(&sem_ctx, env);
-                println!(
-                    "{}",
-                    RcDoc::group(
-                        RcDoc::text("Normal form:".fg(Color::Blue).to_string())
-                            .append(
-                                RcDoc::line()
+                macro_rules! normalise {
+                    ($l:expr) => {
+                        let (tmt, tyt) = tm.check(env, &$l)?;
+                        let sem_ctx = $l.ctx.id_sem_ctx();
+                        let tmn = tmt.eval(&sem_ctx, env);
+                        let tyn = tyt.eval(&sem_ctx, env);
+                        println!(
+                            "{}",
+                            RcDoc::group(
+                                RcDoc::text("Normal form:".fg(Color::Blue).to_string())
                                     .append(
-                                        tmn.quote()
-                                            .to_expr(Some(&local.ctx), env.implicits)
-                                            .to_doc()
+                                        RcDoc::line()
+                                            .append(
+                                                tmn.quote()
+                                                    .to_expr(Some(&$l.ctx), env.implicits)
+                                                    .to_doc()
+                                            )
+                                            .nest(2)
                                     )
-                                    .nest(2)
+                                    .append(RcDoc::line())
+                                    .append(RcDoc::group(
+                                        RcDoc::text("has type:".fg(Color::Blue).to_string())
+                                            .append(
+                                                RcDoc::line()
+                                                    .append(
+                                                        tyn.quote()
+                                                            .to_expr(Some(&$l.ctx), env.implicits)
+                                                            .to_doc()
+                                                    )
+                                                    .nest(2)
+                                            )
+                                    ))
                             )
-                            .append(RcDoc::line())
-                            .append(RcDoc::group(
-                                RcDoc::text("has type:".fg(Color::Blue).to_string()).append(
-                                    RcDoc::line()
-                                        .append(
-                                            tyn.quote()
-                                                .to_expr(Some(&local.ctx), env.implicits)
-                                                .to_doc()
-                                        )
-                                        .nest(2)
-                                )
-                            ))
-                    )
-                    .pretty(80)
-                );
+                            .pretty(80)
+                        );
+                    };
+                }
+                match local {
+                    Either::Left(local) => {
+                        normalise!(local);
+                    }
+                    Either::Right(local) => {
+                        normalise!(local);
+                    }
+                }
             }
             Command::Import(filename, sp) => {
                 println!("{} {}", "Importing".fg(Color::Green), filename.display());

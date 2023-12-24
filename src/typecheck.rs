@@ -3,65 +3,42 @@ use std::hash::Hash;
 use std::{collections::HashMap, ops::Range};
 
 use ariadne::{Color, Fmt, Report, ReportKind, Span};
+use either::Either;
 use thiserror::Error;
 
-use crate::common::Path;
+use crate::common::{CtxT, Environment, Eval, InferRes, InferResEither, Level, Path, Position};
 use crate::normal::TypeNRef;
+use crate::term::ArgsT;
 use crate::{
-    common::{Name, NoDispOption, Pos, Spanned, Tree},
-    eval::SemCtx,
+    common::{Name, NoDispOption, Spanned, Tree},
     normal::TypeN,
     syntax::{Args, Ctx, Label, Sub, Term, Type},
-    term::{ArgsT, ArgsWithTypeT, CtxT, LabelT, TermT, TypeT},
+    term::{ArgsWithTypeT, TermT, TypeT},
 };
 
-pub(crate) struct Local {
-    pub(crate) ctx: CtxT,
-    pub(crate) map: HashMap<Name, (Pos, TypeT)>,
+pub(crate) struct Local<T: Position> {
+    pub(crate) ctx: T::Ctx,
+    pub(crate) map: HashMap<Name, (T, TypeT<T>)>,
 }
 
 impl Tree<NoDispOption<Name>> {
-    pub(crate) fn to_map(&self) -> Local {
+    pub(crate) fn to_map(&self) -> Local<Path> {
         let pairs = self.get_paths();
         let map = pairs
             .into_iter()
             .filter_map(|(path, mname)| {
                 mname.0.clone().map(|name| {
                     let ty = path.to_type();
-                    (name, (Pos::Path(path), ty))
+                    (name, (path, ty))
                 })
             })
             .collect();
 
         Local {
-            ctx: CtxT::Tree(self.clone()),
+            ctx: self.clone(),
             map,
         }
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Insertion {
-    Pruning,
-    Full,
-}
-
-pub struct Reduction {
-    pub disc_rem: bool,
-    pub endo_coh: bool,
-    pub insertion: Option<Insertion>,
-}
-
-pub enum Support {
-    FullInverse,
-    NoInverse,
-}
-
-pub struct Environment {
-    pub top_level: HashMap<Name, (CtxT, TermT, TypeT)>,
-    pub reduction: Reduction,
-    pub support: Support,
-    pub implicits: bool,
 }
 
 #[derive(Error, Debug)]
@@ -130,7 +107,7 @@ impl TypeCheckError<Range<usize>> {
             | TypeCheckError::TermNotTree(tm, _) => tm.span(),
         }
     }
-    pub(crate) fn to_report<Id>(self, src: &Id) -> Report<'static, (Id, Range<usize>)>
+    pub(crate) fn into_report<Id>(self, src: &Id) -> Report<'static, (Id, Range<usize>)>
     where
         Id: Debug + Hash + PartialEq + Eq + Clone,
     {
@@ -274,25 +251,31 @@ impl TypeCheckError<Range<usize>> {
 }
 
 impl<S: Clone + Debug> Term<S> {
-    pub(crate) fn infer(
-        &self,
-        env: &Environment,
-    ) -> Result<(CtxT, TermT, TypeT), TypeCheckError<S>> {
+    pub(crate) fn infer(&self, env: &Environment) -> Result<InferResEither, TypeCheckError<S>> {
         match self {
             Term::Hole(sp) => Err(TypeCheckError::Hole(sp.clone())),
             Term::Susp(t, _) => {
-                let (ctx, tm, ty) = t.infer(env)?;
-                Ok((
-                    ctx.susp(),
-                    TermT::Susp(Box::new(tm)),
-                    TypeT::Susp(Box::new(ty)),
-                ))
+                let res = t.infer(env)?;
+                Ok(res.map_either(InferRes::susp, InferRes::susp))
             }
             Term::Var(x, sp) => env
                 .top_level
                 .get(x)
                 .cloned()
-                .map(|(ctx, _, ty)| (ctx, TermT::TopLvl(x.clone()), ty))
+                .map(|res| {
+                    res.map_either(
+                        |r| InferRes {
+                            ctx: r.ctx,
+                            tm: TermT::TopLvl(x.clone(), Box::new(r.tm)),
+                            ty: r.ty,
+                        },
+                        |r| InferRes {
+                            ctx: r.ctx,
+                            tm: TermT::TopLvl(x.clone(), Box::new(r.tm)),
+                            ty: r.ty,
+                        },
+                    )
+                })
                 .ok_or(TypeCheckError::UnknownTopLevel(x.clone(), sp.clone())),
             Term::Coh(tr, ty, _) => {
                 let (tyt, tyn) = ty.infer(env, &tr.to_map())?;
@@ -301,30 +284,30 @@ impl<S: Clone + Debug> Term<S> {
                     return Err(TypeCheckError::Fullness(*ty.clone()));
                 }
 
-                Ok((
-                    CtxT::Tree(tr.clone()),
-                    TermT::Coh(tr.clone(), Box::new(tyt.clone())),
-                    tyt,
-                ))
+                Ok(Either::Left(InferRes {
+                    ctx: tr.clone(),
+                    tm: TermT::Coh(tr.clone(), Box::new(tyt.clone())),
+                    ty: tyt,
+                }))
             }
-            Term::Id(_) => Ok((
-                CtxT::Tree(Tree::singleton(NoDispOption(None))),
-                TermT::IdT(0),
-                TypeT::Arr(
-                    TermT::Var(Pos::Path(Path::here(0))),
+            Term::Id(_) => Ok(Either::Left(InferRes {
+                ctx: Tree::singleton(NoDispOption(None)),
+                tm: TermT::IdT(0),
+                ty: TypeT::Arr(
+                    TermT::Var(Path::here(0)),
                     Box::new(TypeT::Base),
-                    TermT::Var(Pos::Path(Path::here(0))),
+                    TermT::Var(Path::here(0)),
                 ),
-            )),
+            })),
             t => Err(TypeCheckError::CannotInferCtx(t.clone())),
         }
     }
 
-    pub(crate) fn check(
+    pub(crate) fn check<T: Eval>(
         &self,
         env: &Environment,
-        local: &Local,
-    ) -> Result<(TermT, TypeT), TypeCheckError<S>> {
+        local: &Local<T>,
+    ) -> Result<(TermT<T>, TypeT<T>), TypeCheckError<S>> {
         match self {
             Term::Hole(sp) => Err(TypeCheckError::Hole(sp.clone())),
             Term::Var(x, sp) if local.map.contains_key(x) => local
@@ -332,138 +315,132 @@ impl<S: Clone + Debug> Term<S> {
                 .get(x)
                 .map(|(p, ty)| (TermT::Var(p.clone()), ty.clone()))
                 .ok_or_else(|| TypeCheckError::UnknownLocal(x.clone(), sp.clone())),
-            t @ Term::UComp(_) => {
-                if let CtxT::Tree(t) = &local.ctx {
-                    Ok((TermT::UComp(t.clone()), t.unbiased_type(t.dim())))
+            t @ Term::UComp(_) => local.ctx.check_in_tree(t, |tr| {
+                Ok((TermT::UComp(tr.clone()), tr.unbiased_type(tr.dim())))
+            }),
+            t @ Term::Id(sp) => local.ctx.check_in_tree(t, |tr| {
+                if tr.is_disc() {
+                    let d = tr.dim();
+                    Ok((TermT::IdT(d), tr.unbiased_type(d + 1)))
                 } else {
-                    Err(TypeCheckError::CannotCheckCtx(t.clone()))
+                    Err(TypeCheckError::IdNotDisc(sp.clone(), tr.clone()))
                 }
-            }
-            t @ Term::Id(sp) => {
-                if let CtxT::Tree(t) = &local.ctx {
-                    if t.is_disc() {
-                        let d = t.dim();
-                        Ok((TermT::IdT(d), t.unbiased_type(d + 1)))
-                    } else {
-                        Err(TypeCheckError::IdNotDisc(sp.clone(), t.clone()))
-                    }
-                } else {
-                    Err(TypeCheckError::CannotCheckCtx(t.clone()))
-                }
-            }
-            Term::App(head, args, _) => {
-                let (tmt, tyt, awt, tyn) = match &args.args {
-                    Args::Sub(Spanned(sub, sp)) => {
-                        let (ctxt, tm, ty) = head.infer(env)?;
-                        let (awt, tyn) = match ctxt {
-                            CtxT::Tree(tr) => {
-                                let label = Label::from_sub(sub, &tr, sp)?;
-                                let (l, lty) = label.infer(env, local, sp)?;
-                                (
-                                    ArgsWithTypeT {
-                                        args: ArgsT::Label(l),
-                                        ty: Box::new(lty.quote()),
-                                    },
-                                    lty,
-                                )
+            }),
+            Term::App(head, args, _) => match &args.args {
+                Args::Sub(Spanned(sub, sp)) => {
+                    let res = head.infer(env)?;
+                    match res {
+                        Either::Left(InferRes { ctx, tm, ty }) => {
+                            let label = Label::from_sub(sub, &ctx, sp)?;
+                            let (l, lty) = label.infer(env, local, sp)?;
+
+                            if let Some(t) = &args.ty {
+                                t.check(env, local, &lty)?;
                             }
-                            CtxT::Ctx(ctx) => {
-                                let (args, tys): (Vec<TermT>, Vec<(TypeT, &Term<S>)>) = sub
-                                    .iter()
-                                    .map(|t| Ok((t.check(env, local)?, t)))
-                                    .collect::<Result<Vec<_>, _>>()?
-                                    .into_iter()
-                                    .map(|((tt, ty), tm)| (tt, (ty, tm)))
-                                    .unzip();
-                                let awt = ArgsWithTypeT {
-                                    args: ArgsT::Sub(args),
-                                    ty: Box::new(tys[0].0.clone()),
-                                };
 
-                                let sem_ctx = SemCtx::id(&local.ctx);
+                            let awt = ArgsWithTypeT {
+                                args: l,
+                                ty: Box::new(lty.quote()),
+                            };
 
-                                let args_sem_ctx = awt.eval(&sem_ctx, env);
-
-                                for (x, (y, tm)) in ctx.iter().map(|x| &x.1).zip(tys) {
-                                    // TODO this is wrong
-                                    let xn = x.eval(&args_sem_ctx, env);
-                                    let yn = y.eval(&sem_ctx, env);
-                                    if xn != yn {
-                                        let xe =
-                                            xn.quote().to_expr(Some(&local.ctx), env.implicits);
-                                        let ye =
-                                            yn.quote().to_expr(Some(&local.ctx), env.implicits);
-                                        return Err(TypeCheckError::InferredTypeWrongCalc(
-                                            tm.clone(),
-                                            ye,
-                                            xe,
-                                        ));
-                                    }
-                                }
-
-                                let tyn = awt.ty.eval(&sem_ctx, env);
-
-                                (awt, tyn)
-                            }
-                        };
-
-                        (tm, ty, awt, tyn)
-                    }
-                    Args::Label(Spanned(l, sp)) => {
-                        let (tmt, tyt) =
-                            head.check(env, &l.map_ref(&|_| NoDispOption(None)).to_map())?;
-                        let (lt, tyn) = l.infer(env, local, sp)?;
-
-                        let awt = ArgsWithTypeT {
-                            args: ArgsT::Label(lt),
-                            ty: Box::new(tyn.quote()),
-                        };
-
-                        (tmt, tyt, awt, tyn)
-                    }
-                };
-                if let Some(t) = &args.ty {
-                    t.check(env, local, &tyn)?;
-                }
-
-                Ok((
-                    TermT::App(Box::new(tmt), awt.clone()),
-                    TypeT::App(Box::new(tyt), awt),
-                ))
-            }
-            t => {
-                if let CtxT::Tree(tr) = &local.ctx {
-                    let (ctxt, tmt, tyt) = t.infer(env)?;
-                    match ctxt {
-                        CtxT::Tree(tr_inf) => {
-                            if &tr_inf != tr {
-                                Err(TypeCheckError::TreeMismatch(t.clone(), tr_inf, tr.clone()))
-                            } else {
-                                Ok((tmt, tyt))
-                            }
+                            Ok((
+                                TermT::AppPath(Box::new(tm), awt.clone()),
+                                TypeT::AppPath(Box::new(ty), awt),
+                            ))
                         }
-                        CtxT::Ctx(_) => Err(TypeCheckError::TermNotTree(t.clone(), tr.clone())),
+                        Either::Right(InferRes { ctx, tm, ty }) => {
+                            let (subt, tys): (Vec<TermT<T>>, Vec<_>) = sub
+                                .iter()
+                                .map(|t| Ok((t.check(env, local)?, t)))
+                                .collect::<Result<Vec<_>, _>>()?
+                                .into_iter()
+                                .map(|((tt, ty), tm)| (tt, (ty, tm)))
+                                .unzip();
+                            let awt = ArgsWithTypeT {
+                                args: subt,
+                                ty: Box::new(tys[0].0.clone()),
+                            };
+
+                            let sem_ctx = local.ctx.id_sem_ctx();
+
+                            let args_sem_ctx = awt.eval(&sem_ctx, env);
+
+                            for (x, (y, tm)) in ctx.iter().map(|x| &x.1).zip(tys) {
+                                let xn = x.eval(&args_sem_ctx, env);
+                                let yn = y.eval(&sem_ctx, env);
+                                if xn != yn {
+                                    let xe = xn.quote().to_expr(Some(&local.ctx), env.implicits);
+                                    let ye = yn.quote().to_expr(Some(&local.ctx), env.implicits);
+                                    return Err(TypeCheckError::InferredTypeWrongCalc(
+                                        tm.clone(),
+                                        ye,
+                                        xe,
+                                    ));
+                                }
+                            }
+
+                            let tyn = awt.ty.eval(&sem_ctx, env);
+
+                            if let Some(t) = &args.ty {
+                                t.check(env, local, &tyn)?;
+                            }
+
+                            Ok((
+                                TermT::AppLvl(Box::new(tm), awt.clone()),
+                                TypeT::AppLvl(Box::new(ty), awt),
+                            ))
+                        }
                     }
-                } else {
-                    Err(TypeCheckError::CannotCheckCtx(t.clone()))
                 }
-            }
+                Args::Label(Spanned(l, sp)) => {
+                    let (tmt, tyt) =
+                        head.check(env, &l.map_ref(&|_| NoDispOption(None)).to_map())?;
+                    let (lt, tyn) = l.infer(env, local, sp)?;
+
+                    let awt = ArgsWithTypeT {
+                        args: lt,
+                        ty: Box::new(tyn.quote()),
+                    };
+
+                    if let Some(t) = &args.ty {
+                        t.check(env, local, &tyn)?;
+                    }
+
+                    Ok((
+                        TermT::AppPath(Box::new(tmt), awt.clone()),
+                        TypeT::AppPath(Box::new(tyt), awt),
+                    ))
+                }
+            },
+            t => local.ctx.check_in_tree(t, |tr| {
+                let res = t.infer(env)?;
+                match res {
+                    Either::Left(res) => {
+                        if &res.ctx != tr {
+                            Err(TypeCheckError::TreeMismatch(t.clone(), res.ctx, tr.clone()))
+                        } else {
+                            Ok((res.tm, res.ty))
+                        }
+                    }
+                    Either::Right(_) => Err(TypeCheckError::TermNotTree(t.clone(), tr.clone())),
+                }
+            }),
         }
     }
 }
 
 impl<S: Clone + Debug> Type<S> {
-    pub(crate) fn infer(
+    pub(crate) fn infer<T: Eval>(
         &self,
         env: &Environment,
-        local: &Local,
-    ) -> Result<(TypeT, TypeN), TypeCheckError<S>> {
+        local: &Local<T>,
+    ) -> Result<(TypeT<T>, TypeN<T>), TypeCheckError<S>> {
         match self {
             Type::Base(_) => Ok((TypeT::Base, TypeN(vec![]))),
             Type::Arr(s, a, t, sp) => {
                 let (st, ty1) = s.check(env, local)?;
                 let (tt, ty2) = t.check(env, local)?;
-                let sem_ctx = SemCtx::id(&local.ctx);
+                let sem_ctx = local.ctx.id_sem_ctx();
                 let sn = st.eval(&sem_ctx, env);
                 let ty1n = ty1.eval(&sem_ctx, env);
                 let tn = tt.eval(&sem_ctx, env);
@@ -501,11 +478,11 @@ impl<S: Clone + Debug> Type<S> {
         }
     }
 
-    pub(crate) fn check(
+    pub(crate) fn check<T: Eval>(
         &self,
         env: &Environment,
-        local: &Local,
-        ty: &TypeNRef,
+        local: &Local<T>,
+        ty: &TypeNRef<T>,
     ) -> Result<(), TypeCheckError<S>> {
         match self {
             Type::Hole(_) => Ok(()),
@@ -515,7 +492,7 @@ impl<S: Clone + Debug> Type<S> {
                     ty.quote().to_expr(Some(&local.ctx), env.implicits),
                 ))?;
 
-                let sem_ctx = SemCtx::id(&local.ctx);
+                let sem_ctx = local.ctx.id_sem_ctx();
                 if !matches!(s, Term::Hole(_)) {
                     let (st, _) = s.check(env, local)?;
                     let stn = st.eval(&sem_ctx, env);
@@ -562,12 +539,13 @@ impl<S: Clone + Debug> Label<S> {
         })
     }
 
-    pub(crate) fn infer(
+    #[allow(clippy::type_complexity)]
+    pub(crate) fn infer<T: Eval>(
         &self,
         env: &Environment,
-        local: &Local,
+        local: &Local<T>,
         sp: &S,
-    ) -> Result<(LabelT, TypeN), TypeCheckError<S>> {
+    ) -> Result<(ArgsT<Path, T>, TypeN<T>), TypeCheckError<S>> {
         if self.branches.is_empty() {
             let tm = self.elements.first().unwrap();
             let term =
@@ -576,7 +554,7 @@ impl<S: Clone + Debug> Label<S> {
 
             let (tm, ty) = term.check(env, local)?;
 
-            return Ok((Tree::singleton(tm), ty.eval(&SemCtx::id(&local.ctx), env)));
+            return Ok((Tree::singleton(tm), ty.eval(&local.ctx.id_sem_ctx(), env)));
         }
         let mut branches = vec![];
         let mut el_norm = vec![];
@@ -614,7 +592,7 @@ impl<S: Clone + Debug> Label<S> {
             .map(|(el, eln)| match &el.0 {
                 Some(tm) => {
                     let tmt = tm.check(env, local)?.0;
-                    let tmn = tmt.eval(&SemCtx::id(&local.ctx), env);
+                    let tmn = tmt.eval(&local.ctx.id_sem_ctx(), env);
                     if tmn != eln {
                         let x = eln.quote().to_expr(Some(&local.ctx), env.implicits);
                         Err(TypeCheckError::TermMismatch(tm.clone(), x))
@@ -631,23 +609,24 @@ impl<S: Clone + Debug> Label<S> {
 }
 
 impl<S: Clone + Debug> Ctx<S> {
-    pub(crate) fn check(&self, env: &Environment) -> Result<Local, TypeCheckError<S>> {
+    pub(crate) fn check(
+        &self,
+        env: &Environment,
+    ) -> Result<Either<Local<Path>, Local<Level>>, TypeCheckError<S>> {
         match self {
-            Ctx::Tree(tr) => Ok(tr.to_map()),
+            Ctx::Tree(tr) => Ok(Either::Left(tr.to_map())),
             Ctx::Other(ctx) => {
-                let mut local = Local {
-                    ctx: CtxT::Ctx(vec![]),
+                let mut local: Local<Level> = Local {
+                    ctx: vec![],
                     map: HashMap::new(),
                 };
                 for (level, (name, ty)) in ctx.iter().enumerate() {
                     let (tyt, _) = ty.infer(env, &local)?;
-                    if let CtxT::Ctx(ctxt) = &mut local.ctx {
-                        ctxt.push((Some(name.clone()), tyt.clone()));
-                    }
-                    local.map.insert(name.clone(), (Pos::Level(level), tyt));
+                    local.ctx.push((Some(name.clone()), tyt.clone()));
+                    local.map.insert(name.clone(), (level, tyt));
                 }
 
-                Ok(local)
+                Ok(Either::Right(local))
             }
         }
     }

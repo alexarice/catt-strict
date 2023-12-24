@@ -1,10 +1,17 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use derivative::Derivative;
+use either::Either;
 use itertools::Itertools;
 use pretty::RcDoc;
 
-use crate::term::{TermT, TypeT};
+use crate::{
+    eval::SemCtx,
+    normal::TermN,
+    syntax::Term,
+    term::{ArgsT, TermT, TypeT},
+    typecheck::TypeCheckError,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Name(pub(crate) String);
@@ -91,14 +98,6 @@ pub struct Tree<T> {
 }
 
 impl<T> Tree<T> {
-    pub(crate) fn get(&self, p: &Path) -> &T {
-        let mut tr = self;
-        for x in p.path.iter().rev() {
-            tr = &tr.branches[*x];
-        }
-        &tr.elements[p.here]
-    }
-
     pub(crate) fn is_disc(&self) -> bool {
         self.branches.is_empty() || (self.branches.len() == 1 && self.branches[0].is_disc())
     }
@@ -249,16 +248,6 @@ impl<T> Tree<T> {
         Tree { elements, branches }
     }
 
-    pub(crate) fn susp(self) -> Self
-    where
-        T: Default,
-    {
-        Tree {
-            elements: vec![Default::default(), Default::default()],
-            branches: vec![self],
-        }
-    }
-
     pub(crate) fn lookup(&self, p: &Path) -> Option<&T> {
         let mut tr = self;
         for x in p.path.iter().rev() {
@@ -326,12 +315,168 @@ impl<T: Default> Tree<T> {
             }
         }
     }
+
+    pub(crate) fn susp(self) -> Self {
+        Tree {
+            elements: vec![Default::default(), Default::default()],
+            branches: vec![self],
+        }
+    }
+}
+
+pub trait Container<P, T> {
+    fn idx(&self, pos: &P) -> &T;
+
+    fn to_tree_or_vec(&self) -> Either<&Tree<T>, &Vec<T>>;
+}
+
+pub trait CtxT<P: Position> {
+    fn susp_ctx(self) -> Self;
+
+    fn get_name(&self, pos: &P) -> Option<Name>;
+
+    fn id_sem_ctx(&self) -> SemCtx<P, P>;
+
+    fn check_in_tree<F, S>(
+        &self,
+        term: &Term<S>,
+        func: F,
+    ) -> Result<(TermT<P>, TypeT<P>), TypeCheckError<S>>
+    where
+        F: FnOnce(
+            &Tree<NoDispOption<Name>>,
+        ) -> Result<(TermT<Path>, TypeT<Path>), TypeCheckError<S>>,
+        S: Clone;
+}
+
+pub trait Position: Clone + PartialEq + Eq {
+    type Container<T: Clone>: Container<Self, T> + Clone;
+    type Ctx: CtxT<Self> + Clone;
+
+    fn to_name(&self) -> String;
+}
+
+pub trait Eval: Position {
+    fn eval<T: Clone>(tm: &TermT<Self>, ctx: &SemCtx<Self, T>, env: &Environment) -> TermN<T>;
+
+    fn eval_args<T: Eval, U: Clone>(
+        args: &ArgsT<Self, T>,
+        ty: &TypeT<T>,
+        ctx: &SemCtx<T, U>,
+        env: &Environment,
+    ) -> SemCtx<Self, U>;
+
+    fn restrict<T: Clone>(ctx: SemCtx<Self, T>) -> SemCtx<Self, T>;
+}
+
+pub type Level = usize;
+
+impl<T> Container<Level, T> for Vec<T> {
+    fn idx(&self, pos: &usize) -> &T {
+        self.get(*pos).unwrap()
+    }
+
+    fn to_tree_or_vec(&self) -> Either<&Tree<T>, &Vec<T>> {
+        Either::Right(self)
+    }
+}
+
+impl CtxT<Level> for Vec<(Option<Name>, TypeT<Level>)> {
+    fn susp_ctx(self) -> Self {
+        let mut new_ctx = vec![(None, TypeT::Base), (None, TypeT::Base)];
+        new_ctx.extend(self);
+        new_ctx
+    }
+
+    fn get_name(&self, pos: &Level) -> Option<Name> {
+        self.get(*pos).and_then(|x| x.0.clone())
+    }
+
+    fn id_sem_ctx(&self) -> SemCtx<usize, usize> {
+        SemCtx::id_vec(self.len())
+    }
+
+    fn check_in_tree<F, S>(
+        &self,
+        term: &Term<S>,
+        _: F,
+    ) -> Result<(TermT<Level>, TypeT<Level>), TypeCheckError<S>>
+    where
+        F: FnOnce(
+            &Tree<NoDispOption<Name>>,
+        ) -> Result<(TermT<Path>, TypeT<Path>), TypeCheckError<S>>,
+        S: Clone,
+    {
+        Err(TypeCheckError::CannotCheckCtx(term.clone()))
+    }
+}
+
+impl Position for Level {
+    type Container<T: Clone> = Vec<T>;
+
+    type Ctx = Vec<(Option<Name>, TypeT<Level>)>;
+
+    fn to_name(&self) -> String {
+        format!("l{}", self)
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Path {
     pub(crate) here: usize,
     pub(crate) path: Vec<usize>,
+}
+
+impl CtxT<Path> for Tree<NoDispOption<Name>> {
+    fn susp_ctx(self) -> Self {
+        self.susp()
+    }
+
+    fn get_name(&self, pos: &Path) -> Option<Name> {
+        self.lookup(pos).and_then(|x| x.0.clone())
+    }
+
+    fn id_sem_ctx(&self) -> SemCtx<Path, Path> {
+        SemCtx::id_tree(self)
+    }
+
+    fn check_in_tree<F, S>(
+        &self,
+        _: &Term<S>,
+        func: F,
+    ) -> Result<(TermT<Path>, TypeT<Path>), TypeCheckError<S>>
+    where
+        F: FnOnce(
+            &Tree<NoDispOption<Name>>,
+        ) -> Result<(TermT<Path>, TypeT<Path>), TypeCheckError<S>>,
+        S: Clone,
+    {
+        func(self)
+    }
+}
+
+impl<T> Container<Path, T> for Tree<T> {
+    fn idx(&self, p: &Path) -> &T {
+        let mut tr = self;
+        for x in p.path.iter().rev() {
+            tr = &tr.branches[*x];
+        }
+        &tr.elements[p.here]
+    }
+
+    fn to_tree_or_vec(&self) -> Either<&Tree<T>, &Vec<T>> {
+        Either::Left(self)
+    }
+}
+
+impl Position for Path {
+    type Container<T: Clone> = Tree<T>;
+
+    type Ctx = Tree<NoDispOption<Name>>;
+
+    fn to_name(&self) -> String {
+        format!("p{}", self)
+    }
 }
 
 impl Display for Path {
@@ -356,7 +501,7 @@ impl Path {
         self
     }
 
-    pub(crate) fn to_type(&self) -> TypeT {
+    pub(crate) fn to_type(&self) -> TypeT<Path> {
         let mut ty = TypeT::Base;
         let mut current_path = vec![];
 
@@ -373,11 +518,7 @@ impl Path {
 
             current_path.insert(0, *x);
 
-            ty = TypeT::Arr(
-                TermT::Var(Pos::Path(fst)),
-                Box::new(ty),
-                TermT::Var(Pos::Path(snd)),
-            )
+            ty = TypeT::Arr(TermT::Var(fst), Box::new(ty), TermT::Var(snd))
         }
         ty
     }
@@ -387,17 +528,45 @@ impl Path {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum Pos {
-    Level(usize),
-    Path(Path),
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Insertion {
+    Pruning,
+    Full,
 }
 
-impl Display for Pos {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Pos::Level(l) => write!(f, "l{l}"),
-            Pos::Path(p) => write!(f, "p{p}"),
+pub struct Reduction {
+    pub disc_rem: bool,
+    pub endo_coh: bool,
+    pub insertion: Option<Insertion>,
+}
+
+pub enum Support {
+    FullInverse,
+    NoInverse,
+}
+
+#[derive(Clone)]
+pub struct InferRes<T: Position> {
+    pub(crate) ctx: <T as Position>::Ctx,
+    pub(crate) tm: TermT<T>,
+    pub(crate) ty: TypeT<T>,
+}
+
+impl<T: Position> InferRes<T> {
+    pub(crate) fn susp(self) -> Self {
+        InferRes {
+            ctx: self.ctx.susp_ctx(),
+            tm: TermT::Susp(Box::new(self.tm)),
+            ty: TypeT::Susp(Box::new(self.ty)),
         }
     }
+}
+
+pub type InferResEither = Either<InferRes<Path>, InferRes<Level>>;
+
+pub struct Environment {
+    pub top_level: HashMap<Name, InferResEither>,
+    pub reduction: Reduction,
+    pub support: Support,
+    pub implicits: bool,
 }

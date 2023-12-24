@@ -3,106 +3,70 @@ use std::ops::RangeInclusive;
 use itertools::Itertools;
 
 use crate::{
-    common::{Name, NoDispOption, Path, Pos, Tree},
+    common::{
+        Container, Environment, Eval, Insertion, Level, Name, NoDispOption, Path, Position, Tree,
+    },
     normal::{HeadN, TermN, TypeN, TypeNRef},
-    term::{ArgsT, ArgsWithTypeT, CtxT, LabelT, TermT, TypeT},
-    typecheck::{Environment, Insertion},
+    term::{ArgsT, ArgsWithTypeT, TermT, TypeT},
 };
 
 #[derive(Clone, Debug)]
-pub(crate) enum SemCtxMap {
-    LabelN(Tree<TermN>),
-    SubN(Vec<TermN>),
+pub struct SemCtx<S: Position, T: Clone> {
+    map: S::Container<TermN<T>>,
+    ty: TypeN<T>,
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct SemCtx {
-    map: SemCtxMap,
-    ty: TypeN,
-}
-
-impl SemCtx {
-    pub(crate) fn new(map: SemCtxMap, ty: TypeN) -> Self {
+impl<S: Position, T: Clone> SemCtx<S, T> {
+    pub(crate) fn new(map: S::Container<TermN<T>>, ty: TypeN<T>) -> Self {
         SemCtx { map, ty }
     }
 
-    pub(crate) fn id(ctx: &CtxT) -> Self {
-        match ctx {
-            CtxT::Tree(tr) => Self::id_tree(tr),
-            CtxT::Ctx(c) => Self::id_vec(c.len()),
-        }
+    pub(crate) fn get(&self, pos: &S) -> TermN<T> {
+        self.map.idx(pos).clone()
     }
 
-    pub(crate) fn id_tree<T>(positions: &Tree<T>) -> Self {
-        SemCtx::new(
-            SemCtxMap::LabelN(
-                positions
-                    .path_tree()
-                    .map(&|p| TermN::Variable(Pos::Path(p))),
-            ),
-            TypeN::base(),
-        )
-    }
-
-    pub(crate) fn id_vec(len: usize) -> Self {
-        SemCtx::new(
-            SemCtxMap::SubN((0..len).map(|i| TermN::Variable(Pos::Level(i))).collect()),
-            TypeN::base(),
-        )
-    }
-
-    pub(crate) fn get(&self, pos: &Pos) -> TermN {
-        match (&self.map, pos) {
-            (SemCtxMap::LabelN(l), Pos::Path(p)) => l.get(p).clone(),
-            (SemCtxMap::SubN(s), Pos::Level(l)) => s[*l].clone(),
-            _ => panic!("Invalid get"),
-        }
-    }
-
-    pub(crate) fn get_ty(&self) -> TypeN {
+    pub(crate) fn get_ty(&self) -> TypeN<T> {
         self.ty.clone()
-    }
-
-    pub(crate) fn restrict(self) -> Self {
-        if let SemCtxMap::LabelN(l) = self.map {
-            let mut ty = self.ty;
-            let (s, t) = l.elements.into_iter().next_tuple().unwrap();
-            ty.0.push((s, t));
-
-            let map = SemCtxMap::LabelN(l.branches.into_iter().next().unwrap());
-
-            SemCtx { ty, map }
-        } else {
-            panic!("Tried to restrict non label")
-        }
-    }
-
-    pub(crate) fn include(self, rng: &RangeInclusive<usize>) -> Self {
-        if let SemCtxMap::LabelN(mut l) = self.map {
-            let map = SemCtxMap::LabelN(Tree {
-                elements: l.elements.drain(rng.clone()).collect(),
-                branches: l.branches.drain(rng.start()..rng.end()).collect(),
-            });
-
-            SemCtx { ty: self.ty, map }
-        } else {
-            panic!("Tried to restrict non label")
-        }
-    }
-
-    pub(crate) fn to_args(self) -> (Tree<TermN>, usize) {
-        let SemCtxMap::LabelN(args) = self.map else {
-	    panic!("Non tree sem ctx converted to args")
-	};
-
-        let dim = self.ty.dim();
-
-        (args.unrestrict(self.ty), dim)
     }
 }
 
-impl Tree<TermN> {
-    pub(crate) fn unrestrict(mut self, ty: TypeN) -> Self {
+impl<S: Eval, T: Clone> SemCtx<S, T> {
+    pub(crate) fn restrict(self) -> Self {
+        S::restrict(self)
+    }
+}
+
+impl SemCtx<Path, Path> {
+    pub(crate) fn id_tree<U>(positions: &Tree<U>) -> Self {
+        SemCtx::new(positions.path_tree().map(&TermN::Variable), TypeN::base())
+    }
+}
+
+impl SemCtx<Level, Level> {
+    pub(crate) fn id_vec(len: usize) -> Self {
+        SemCtx::new((0..len).map(TermN::Variable).collect(), TypeN::base())
+    }
+}
+
+impl<T: Clone> SemCtx<Path, T> {
+    pub(crate) fn include(mut self, rng: &RangeInclusive<usize>) -> Self {
+        let map = Tree {
+            elements: self.map.elements.drain(rng.clone()).collect(),
+            branches: self.map.branches.drain(rng.start()..rng.end()).collect(),
+        };
+
+        SemCtx { ty: self.ty, map }
+    }
+
+    pub(crate) fn into_args(self) -> (Tree<TermN<T>>, usize) {
+        let dim = self.ty.dim();
+
+        (self.map.unrestrict(self.ty), dim)
+    }
+}
+
+impl<T> Tree<TermN<T>> {
+    pub(crate) fn unrestrict(mut self, ty: TypeN<T>) -> Self {
         for (s, t) in ty.0.into_iter().rev() {
             self = Tree {
                 elements: vec![s, t],
@@ -116,7 +80,10 @@ impl Tree<TermN> {
     pub(crate) fn find_insertion_redex(
         &self,
         insertion: &Insertion,
-    ) -> Option<(Path, Tree<NoDispOption<Name>>, Tree<TermN>)> {
+    ) -> Option<(Path, Tree<NoDispOption<Name>>, Tree<TermN<T>>)>
+    where
+        T: Clone,
+    {
         let v = self.get_maximal_with_branching();
         v.into_iter().find_map(|(p, bh, tm)| match tm {
             TermN::Other(HeadN::IdN { dim }, args) => Some((p, Tree::disc(*dim), args.clone())),
@@ -128,13 +95,13 @@ impl Tree<TermN> {
     }
 }
 
-fn eval_coh(
+fn eval_coh<T: Clone>(
     mut tree: Tree<NoDispOption<Name>>,
-    mut tyt: Option<TypeT>,
-    ctx: &SemCtx,
+    mut tyt: Option<TypeT<Path>>,
+    ctx: &SemCtx<Path, T>,
     env: &Environment,
-) -> TermN {
-    let (mut args, dim) = ctx.clone().to_args();
+) -> TermN<T> {
+    let (mut args, dim) = ctx.clone().into_args();
 
     let final_dim = tree.dim() + dim;
 
@@ -146,11 +113,11 @@ fn eval_coh(
     if let Some(insertion) = &env.reduction.insertion {
         while let Some((p, tr, args_inner)) = args.find_insertion_redex(insertion) {
             tyt = tyt.map(|x| {
-                let l = LabelT::exterior_sub(&tree, p.clone(), &tr);
-                TypeT::App(
+                let l = tree.exterior_sub(p.clone(), &tr);
+                TypeT::AppPath(
                     Box::new(x),
                     ArgsWithTypeT {
-                        args: ArgsT::Label(l),
+                        args: l,
                         ty: Box::new(TypeT::Base),
                     },
                 )
@@ -171,9 +138,9 @@ fn eval_coh(
 
     if env.reduction.endo_coh && tyn.0.last().is_some_and(|(s, t)| s == t) {
         if let TypeT::Arr(s, a, _) = tyn.quote() {
-            let sem_ctx = SemCtx::new(SemCtxMap::LabelN(args), TypeN::base());
+            let sem_ctx = SemCtx::new(args, TypeN::base());
 
-            let args = s.eval(&sem_ctx, env).to_args(a.eval(&sem_ctx, env));
+            let args = s.eval(&sem_ctx, env).into_args(a.eval(&sem_ctx, env));
 
             return TermN::Other(HeadN::IdN { dim: tyn.dim() - 1 }, args);
         }
@@ -181,7 +148,7 @@ fn eval_coh(
 
     if !env.reduction.endo_coh && tree.is_disc() {
         let path = tree.get_maximal_paths().into_iter().next().unwrap();
-        let term = TermN::Variable(Pos::Path(path));
+        let term = TermN::Variable(path);
         if tyn.0.last().is_some_and(|(s, t)| s == &term && t == &term) {
             return TermN::Other(HeadN::IdN { dim: tree.dim() }, args);
         }
@@ -197,29 +164,96 @@ fn eval_coh(
     TermN::Other(HeadN::CohN { tree, ty: tyn }, args)
 }
 
-impl TermT {
-    pub(crate) fn eval(&self, ctx: &SemCtx, env: &Environment) -> TermN {
-        match self {
-            TermT::App(t, awt) => {
+impl Eval for Path {
+    fn eval<T: Clone>(tm: &TermT<Self>, ctx: &SemCtx<Self, T>, env: &Environment) -> TermN<T> {
+        match tm {
+            TermT::AppLvl(t, awt) => {
+                let sem_ctx = awt.eval(ctx, env);
+                t.eval(&sem_ctx, env)
+            }
+            TermT::AppPath(t, awt) => {
                 let sem_ctx = awt.eval(ctx, env);
                 t.eval(&sem_ctx, env)
             }
             TermT::Var(pos) => ctx.get(pos).clone(),
-            TermT::TopLvl(name) => env.top_level.get(name).unwrap().1.eval(ctx, env),
+            TermT::TopLvl(_, tmt) => tmt.eval(ctx, env),
             TermT::Susp(t) => t.eval(&ctx.clone().restrict(), env),
             TermT::Include(t, rng) => t.eval(&ctx.clone().include(rng), env),
             TermT::UComp(tr) => eval_coh(tr.clone(), None, ctx, env),
             TermT::Coh(tr, ty) => eval_coh(tr.clone(), Some(*ty.clone()), ctx, env),
             TermT::IdT(dim) => {
-                let (args, res_dim) = ctx.clone().to_args();
+                let (args, res_dim) = ctx.clone().into_args();
                 TermN::Other(HeadN::IdN { dim: res_dim + dim }, args)
             }
         }
     }
+
+    fn eval_args<T: Eval, U: Clone>(
+        args: &ArgsT<Self, T>,
+        ty: &TypeT<T>,
+        ctx: &SemCtx<T, U>,
+        env: &Environment,
+    ) -> SemCtx<Self, U> {
+        let map = args.map_ref(&|tm| tm.eval(ctx, env));
+
+        let tyn = ty.eval(ctx, env);
+        SemCtx::new(map, tyn)
+    }
+
+    fn restrict<T: Clone>(mut ctx: SemCtx<Self, T>) -> SemCtx<Self, T> {
+        ctx.ty
+            .0
+            .push(ctx.map.elements.into_iter().next_tuple().unwrap());
+
+        ctx.map = ctx.map.branches.into_iter().next().unwrap();
+
+        ctx
+    }
 }
 
-impl TypeT {
-    pub(crate) fn eval(&self, ctx: &SemCtx, env: &Environment) -> TypeN {
+impl Eval for Level {
+    fn eval<T: Clone>(tm: &TermT<Self>, ctx: &SemCtx<Self, T>, env: &Environment) -> TermN<T> {
+        match tm {
+            TermT::AppLvl(t, awt) => {
+                let sem_ctx = awt.eval(ctx, env);
+                t.eval(&sem_ctx, env)
+            }
+            TermT::AppPath(t, awt) => {
+                let sem_ctx = awt.eval(ctx, env);
+                t.eval(&sem_ctx, env)
+            }
+            TermT::Var(pos) => ctx.get(pos).clone(),
+            TermT::TopLvl(_, tmt) => tmt.eval(ctx, env),
+            TermT::Susp(t) => t.eval(&ctx.clone().restrict(), env),
+            _ => unreachable!(),
+        }
+    }
+
+    fn eval_args<T: Eval, U: Clone>(
+        args: &ArgsT<Self, T>,
+        ty: &TypeT<T>,
+        ctx: &SemCtx<T, U>,
+        env: &Environment,
+    ) -> SemCtx<Self, U> {
+        let map = args.iter().map(|t| t.eval(ctx, env)).collect();
+        let tyn = ty.eval(ctx, env);
+        SemCtx::new(map, tyn)
+    }
+
+    fn restrict<T: Clone>(mut ctx: SemCtx<Self, T>) -> SemCtx<Self, T> {
+        ctx.ty.0.push(ctx.map.drain(0..2).next_tuple().unwrap());
+        ctx
+    }
+}
+
+impl<S: Eval> TermT<S> {
+    pub(crate) fn eval<T: Clone>(&self, ctx: &SemCtx<S, T>, env: &Environment) -> TermN<T> {
+        S::eval(self, ctx, env)
+    }
+}
+
+impl<S: Eval> TypeT<S> {
+    pub(crate) fn eval<T: Clone>(&self, ctx: &SemCtx<S, T>, env: &Environment) -> TypeN<T> {
         match &self {
             TypeT::Base => ctx.get_ty().clone(),
             TypeT::Arr(s, a, t) => {
@@ -227,38 +261,24 @@ impl TypeT {
                 an.0.push((s.eval(ctx, env), t.eval(ctx, env)));
                 an
             }
-            TypeT::App(ty, awt) => ty.eval(&awt.eval(ctx, env), env),
-            TypeT::Susp(ty) => ty.eval(&ctx.clone().restrict(), env),
+            TypeT::AppLvl(ty, awt) => ty.eval(&awt.eval(ctx, env), env),
+            TypeT::AppPath(ty, awt) => ty.eval(&awt.eval(ctx, env), env),
+            TypeT::Susp(ty) => {
+                let new_ctx: SemCtx<S, T> = ctx.clone();
+                ty.eval(&new_ctx.restrict(), env)
+            }
         }
     }
 }
 
-impl ArgsWithTypeT {
-    pub(crate) fn eval(&self, ctx: &SemCtx, env: &Environment) -> SemCtx {
-        self.args.eval(&self.ty, ctx, env)
-    }
-}
-
-impl ArgsT {
-    pub(crate) fn eval(&self, ty: &TypeT, ctx: &SemCtx, env: &Environment) -> SemCtx {
-        match self {
-            ArgsT::Sub(ts) => {
-                let map = SemCtxMap::SubN(ts.iter().map(|t| t.eval(ctx, env)).collect());
-                let tyn = ty.eval(ctx, env);
-                SemCtx::new(map, tyn)
-            }
-            ArgsT::Label(tr) => {
-                let map = SemCtxMap::LabelN(tr.map_ref(&|tm| tm.eval(ctx, env)));
-
-                let tyn = ty.eval(ctx, env);
-                SemCtx::new(map, tyn)
-            }
-        }
+impl<S: Eval, T: Eval> ArgsWithTypeT<S, T> {
+    pub(crate) fn eval<U: Clone>(&self, ctx: &SemCtx<T, U>, env: &Environment) -> SemCtx<S, U> {
+        S::eval_args(&self.args, &self.ty, ctx, env)
     }
 }
 
 impl HeadN {
-    pub(crate) fn quote(&self) -> TermT {
+    pub(crate) fn quote(&self) -> TermT<Path> {
         match self {
             HeadN::CohN { tree, ty } => TermT::Coh(tree.clone(), Box::new(ty.quote())),
             HeadN::UCohN { tree } => TermT::UComp(tree.clone()),
@@ -267,14 +287,14 @@ impl HeadN {
     }
 }
 
-impl TermN {
-    pub(crate) fn quote(&self) -> TermT {
+impl<T: Position> TermN<T> {
+    pub(crate) fn quote(&self) -> TermT<T> {
         match self {
             TermN::Variable(x) => TermT::Var(x.clone()),
-            TermN::Other(head, args) => TermT::App(
+            TermN::Other(head, args) => TermT::AppPath(
                 Box::new(head.quote()),
                 ArgsWithTypeT {
-                    args: ArgsT::Label(args.map_ref(&|tm| tm.quote())),
+                    args: args.map_ref(&|tm| tm.quote()),
                     ty: Box::new(TypeT::Base),
                 },
             ),
@@ -282,8 +302,8 @@ impl TermN {
     }
 }
 
-impl TypeNRef {
-    pub(crate) fn quote(&self) -> TypeT {
+impl<T: Position> TypeNRef<T> {
+    pub(crate) fn quote(&self) -> TypeT<T> {
         let mut ret = TypeT::Base;
 
         for (s, t) in &self.0 {
@@ -294,10 +314,10 @@ impl TypeNRef {
     }
 }
 
-impl LabelT {
-    pub(crate) fn unbiased(tree: Tree<NoDispOption<Name>>, d: usize) -> LabelT {
-        let mut ty = tree.unbiased_type(d);
-        let mut tr = Tree::singleton(tree.unbiased_comp(d));
+impl Tree<NoDispOption<Name>> {
+    fn unbiased(self, d: usize) -> Tree<TermT<Path>> {
+        let mut ty = self.unbiased_type(d);
+        let mut tr = Tree::singleton(self.unbiased_comp(d));
         while let TypeT::Arr(s, a, t) = ty {
             tr = Tree {
                 elements: vec![s, t],
@@ -308,33 +328,32 @@ impl LabelT {
         tr
     }
 
-    pub(crate) fn exterior_sub<T>(
-        outer: &Tree<T>,
-        mut bp: Path,
-        inner: &Tree<NoDispOption<Name>>,
-    ) -> LabelT {
+    fn exterior_sub(&self, mut bp: Path, inner: &Tree<NoDispOption<Name>>) -> Tree<TermT<Path>> {
         match bp.path.pop() {
             Some(i) => {
-                let mut l = outer.path_tree().map(&|p| TermT::Var(Pos::Path(p)));
+                let mut l = self.path_tree().map(&TermT::Var);
 
-                l.branches[i] = LabelT::exterior_sub(&outer.branches[i], bp, &inner.branches[0])
+                l.branches[i] = self.branches[i]
+                    .exterior_sub(bp, &inner.branches[0])
                     .map(&|tm| TermT::Include(Box::new(TermT::Susp(Box::new(tm))), i..=i + 1));
 
                 l
             }
             None => {
                 let inner_size = inner.branches.len();
-                let mut l = outer.path_tree().map(&|mut p| {
+                let mut l = self.path_tree().map(&|mut p| {
                     let i = p.fst_mut();
                     if *i > bp.here {
                         *i += inner_size;
                         *i -= 1;
                     }
-                    TermT::Var(Pos::Path(p))
+                    TermT::Var(p)
                 });
 
-                let d = outer.branches[bp.here].dim() + 1;
-                let inner_args = LabelT::unbiased(inner.clone(), d)
+                let d = self.branches[bp.here].dim() + 1;
+                let inner_args = inner
+                    .clone()
+                    .unbiased(d)
                     .map(&|tm| TermT::Include(Box::new(tm), bp.here..=bp.here + inner_size));
                 l.branches.splice(bp.here..bp.here + 1, inner_args.branches);
 

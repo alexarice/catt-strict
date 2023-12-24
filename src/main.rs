@@ -7,7 +7,7 @@ use std::{
 use ariadne::{Cache, Color, Fmt, Report, ReportKind, Source};
 use catt_strict::{
     command::{command, Command, Src},
-    typecheck::{Environment, Insertion, Reduction, Support},
+    common::{Environment, Insertion, Reduction, Support},
 };
 use chumsky::prelude::*;
 use rustyline::{

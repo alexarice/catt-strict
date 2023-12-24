@@ -3,17 +3,14 @@ use std::{collections::HashSet, ops::Deref};
 use derivative::Derivative;
 use ref_cast::RefCast;
 
-use crate::{
-    common::{Name, NoDispOption, Path, Pos, Tree},
-    typecheck::Support,
-};
+use crate::common::{Name, NoDispOption, Path, Support, Tree};
 
 #[derive(Clone, Debug, Eq, Derivative)]
 #[derivative(PartialEq)]
-pub(crate) enum HeadN {
+pub enum HeadN {
     CohN {
         tree: Tree<NoDispOption<Name>>,
-        ty: TypeN,
+        ty: TypeN<Path>,
     },
     UCohN {
         tree: Tree<NoDispOption<Name>>,
@@ -24,41 +21,42 @@ pub(crate) enum HeadN {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum TermN {
-    Variable(Pos),
-    Other(HeadN, Tree<TermN>),
+pub enum TermN<T> {
+    Variable(T),
+    Other(HeadN, Tree<TermN<T>>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct TypeN(pub(crate) Vec<(TermN, TermN)>);
+pub struct TypeN<T>(pub(crate) Vec<(TermN<T>, TermN<T>)>);
 
 #[derive(Debug, PartialEq, Eq, RefCast)]
 #[repr(transparent)]
-pub(crate) struct TypeNRef(pub(crate) [(TermN, TermN)]);
+pub struct TypeNRef<T>(pub(crate) [(TermN<T>, TermN<T>)]);
 
-impl Deref for TypeN {
-    type Target = TypeNRef;
+impl<T> Deref for TypeN<T> {
+    type Target = TypeNRef<T>;
 
     fn deref(&self) -> &Self::Target {
         TypeNRef::ref_cast(&self.0)
     }
 }
 
-impl TermN {
-    pub(crate) fn to_args(self, ty: TypeN) -> Tree<TermN> {
+impl<T> TermN<T> {
+    pub(crate) fn into_args(self, ty: TypeN<T>) -> Tree<TermN<T>> {
         ty.0.into_iter()
             .rfold(Tree::singleton(self), |tr, (s, t)| Tree {
                 elements: vec![s, t],
                 branches: vec![tr],
             })
     }
+}
 
+impl TermN<Path> {
     pub(crate) fn free_vars(&self, set: &mut HashSet<Path>) {
         match self {
-            TermN::Variable(Pos::Path(p)) => {
+            TermN::Variable(p) => {
                 set.insert(p.clone());
             }
-            TermN::Variable(_) => {}
             TermN::Other(_, args) => {
                 for (_, tm) in args.get_paths() {
                     tm.free_vars(set);
@@ -68,15 +66,17 @@ impl TermN {
     }
 }
 
-impl TypeN {
-    pub(crate) fn base() -> TypeN {
+impl<T> TypeN<T> {
+    pub(crate) fn base() -> TypeN<T> {
         TypeN(vec![])
     }
 
     pub(crate) fn dim(&self) -> usize {
         self.0.len()
     }
+}
 
+impl TypeN<Path> {
     pub(crate) fn free_vars(self) -> HashSet<Path> {
         let mut set = HashSet::new();
         for (s, t) in self.0 {
@@ -129,7 +129,7 @@ impl TypeN {
 
     pub(crate) fn is_unbiased<T>(&self, tree: &Tree<T>) -> bool {
         if let Some((s, t)) = self.0.last() {
-            let path_tree = tree.path_tree().map(&|p| TermN::Variable(Pos::Path(p)));
+            let path_tree = tree.path_tree().map(&TermN::Variable);
             let dim = tree.dim();
             let src = path_tree.bdry(dim - 1, false);
             let src_correct = if let Some(x) = src.get_max() {
@@ -157,7 +157,7 @@ impl TypeN {
     }
 }
 
-impl TypeNRef {
+impl<T> TypeNRef<T> {
     pub(crate) fn inner(&self) -> &Self {
         TypeNRef::ref_cast(&self.0[0..self.0.len() - 1])
     }
