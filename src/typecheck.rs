@@ -43,9 +43,9 @@ impl Tree<NoDispOption<Name>> {
 
 #[derive(Error, Debug)]
 pub enum TypeCheckError<S> {
-    #[error("Unknown top level name: {}", .0.fg(Color::Red))]
+    #[error("Unknown top level name: \"{}\"", .0.fg(Color::Red))]
     UnknownTopLevel(Name, S),
-    #[error("Unknown local variable: {}", .0.fg(Color::Red))]
+    #[error("Unknown local variable: \"{}\"", .0.fg(Color::Red))]
     UnknownLocal(Name, S),
     #[error("Type \"{}\" does not satisfy fullness condition", .0.fg(Color::Red))]
     Fullness(Type<S>),
@@ -55,9 +55,9 @@ pub enum TypeCheckError<S> {
     CannotCheckCtx(Term<S>),
     #[error("Identity does not exist in context \"{}\"", .1.fg(Color::Red))]
     IdNotDisc(S, Tree<NoDispOption<Name>>),
-    #[error("Type {} is not checkable", .0.fg(Color::Red))]
+    #[error("Type \"{}\" is not checkable", .0.fg(Color::Red))]
     CannotCheck(Type<S>),
-    #[error("Terms {} and {} do not have matching types", .0.fg(Color::Blue), .2.fg(Color::Magenta))]
+    #[error("Terms \"{}\" and \"{}\" do not have matching types", .0.fg(Color::Blue), .2.fg(Color::Magenta))]
     InferredTypesNotEqual(Term<S>, Type<()>, Term<S>, Type<()>, S),
     #[error("Term \"{}\" had inferred type \"{}\" but should have type \"{}\"", .0.fg(Color::Red), .1.fg(Color::Red), .2.fg(Color::Green))]
     InferredTypeWrong(Term<S>, Type<()>, Type<S>),
@@ -163,7 +163,6 @@ impl TypeCheckError<Range<usize>> {
                         .with_order(1)
                         .with_color(Color::Blue),
                 );
-                report.set_note("Terms in an arrow type should have equal type");
             }
             TypeCheckError::InferredTypeWrong(tm, ity, gty) => {
                 report.add_label(

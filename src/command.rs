@@ -47,6 +47,8 @@ where
     FileError(PathBuf, Range<usize>),
     #[error("Other report")]
     Report(Vec<Report<'static, (Id, Range<usize>)>>),
+    #[error("Assertion failed: Terms \"{}\" and \"{}\" are not equal", .0.fg(Color::Red), .1.fg(Color::Red))]
+    Assertion(Term<Range<usize>>, Term<Range<usize>>, Range<usize>),
 }
 
 impl<Id: Debug + Hash + PartialEq + Eq + Clone> CattError<Id> {
@@ -66,6 +68,24 @@ impl<Id: Debug + Hash + PartialEq + Eq + Clone> CattError<Id> {
                 vec![report]
             }
             CattError::Report(x) => x,
+            CattError::Assertion(tm1, tm2, sp) => {
+                let report = Report::build(ReportKind::Error, src.clone(), sp.start())
+                    .with_message(message)
+                    .with_label(
+                        ariadne::Label::new((src.clone(), tm1.span().clone()))
+                            .with_message("First term")
+                            .with_color(Color::Blue)
+                            .with_order(0),
+                    )
+                    .with_label(
+                        ariadne::Label::new((src.clone(), tm2.span().clone()))
+                            .with_message("should equal second term")
+                            .with_color(Color::Magenta)
+                            .with_order(1),
+                    )
+                    .finish();
+                vec![report]
+            }
         }
     }
 }
@@ -80,6 +100,7 @@ pub enum Command {
         Term<Range<usize>>,
     ),
     Normalise(Ctx<Range<usize>>, Term<Range<usize>>),
+    AssertEq(Ctx<Range<usize>>, Term<Range<usize>>, Term<Range<usize>>),
     Import(PathBuf, Range<usize>),
 }
 
@@ -101,9 +122,17 @@ pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
             Some((ctx, Some(ty))) => Command::DefWT(id, ctx, ty, tm),
         })
         .or(just("normalise ")
-            .ignore_then(ctx())
-            .then(just("|").padded_by(comment()).ignore_then(term()))
+            .ignore_then(ctx().padded_by(comment()))
+            .then(just("|").ignore_then(term().padded_by(comment())))
             .map(|(ctx, tm)| Command::Normalise(ctx, tm)))
+        .or(just("assert ")
+            .ignore_then(ctx().padded_by(comment()))
+            .then(
+                just("|")
+                    .ignore_then(term().padded_by(comment()))
+                    .then(just("=").ignore_then(term().padded_by(comment()))),
+            )
+            .map(|(ctx, (tm1, tm2))| Command::AssertEq(ctx, tm1, tm2)))
         .or(just("import ").ignore_then(
             text::whitespace()
                 .at_least(1)
@@ -269,6 +298,64 @@ impl Command {
                     }
                     Either::Right(local) => {
                         normalise!(local);
+                    }
+                }
+            }
+            Command::AssertEq(ctx, tm1, tm2) => {
+                println!(
+                    "{} {tm1} {} {tm2}",
+                    "Checking".fg(Color::Green),
+                    "=".fg(Color::Blue)
+                );
+                let local = ctx.check(env)?;
+                macro_rules! check_eq {
+                    ($l:expr) => {
+                        let sem_ctx = $l.ctx.id_sem_ctx();
+                        let (tmt1, tyt1) = tm1.check(env, &$l)?;
+                        let tmn1 = tmt1.eval(&sem_ctx, env);
+                        let tyn1 = tyt1.eval(&sem_ctx, env);
+
+                        let (tmt2, tyt2) = tm2.check(env, &$l)?;
+                        let tmn2 = tmt2.eval(&sem_ctx, env);
+                        let tyn2 = tyt2.eval(&sem_ctx, env);
+
+                        if tyn1 != tyn2 {
+                            let x = tyt1.to_expr(Some(&$l.ctx), env.implicits);
+                            let y = tyt2.to_expr(Some(&$l.ctx), env.implicits);
+                            let span = tm1.span().start..tm2.span().end();
+                            return Err(CattError::TypeCheckError(
+                                TypeCheckError::InferredTypesNotEqual(tm1, x, tm2, y, span),
+                            ));
+                        }
+                        if tmn1 != tmn2 {
+                            let span = tm1.span().start..tm2.span().end();
+                            return Err(CattError::Assertion(tm1, tm2, span));
+                        }
+                        println!(
+                            "{}",
+                            RcDoc::group(
+                                RcDoc::text("Terms:".fg(Color::Blue).to_string())
+                                    .append(RcDoc::line().append(tm1.to_doc()).nest(2))
+                                    .append(RcDoc::line())
+                                    .append(RcDoc::group(
+                                        RcDoc::text("and".fg(Color::Blue).to_string())
+                                            .append(RcDoc::line().append(tm2.to_doc()).nest(2))
+                                    ))
+                                    .append(
+                                        RcDoc::line()
+                                            .append("are equal".fg(Color::Blue).to_string())
+                                    )
+                            )
+                            .pretty(80)
+                        );
+                    };
+                }
+                match local {
+                    Either::Left(local) => {
+                        check_eq!(local);
+                    }
+                    Either::Right(local) => {
+                        check_eq!(local);
                     }
                 }
             }
