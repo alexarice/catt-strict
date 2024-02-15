@@ -87,3 +87,5 @@ def eh (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x)) : ucomp[a,b] -> ucomp[b
 	  , swap_tgt_norm_compat(x,a,b)
 	  , tgt_norm(x,a,b)
           ]
+
+normalise (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x)) | eh(x,a,b)
