@@ -128,9 +128,12 @@ impl TypeN<Path> {
     }
 
     pub(crate) fn is_unbiased<T>(&self, tree: &Tree<T>) -> bool {
+	let dim = tree.dim();
+	if dim != self.dim() {
+	    return false;
+	}
         if let Some((s, t)) = self.0.last() {
             let path_tree = tree.path_tree().map(&TermN::Variable);
-            let dim = tree.dim();
             let src = path_tree.bdry(dim - 1, false);
             let src_correct = if let Some(x) = src.get_max() {
                 s == x
