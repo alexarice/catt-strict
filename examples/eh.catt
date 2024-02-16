@@ -1,44 +1,13 @@
-// Catt proof of eh
-
-def unitor = coh [ {x} : ucomp [id(x), id(x)] -> id(x)]
-def unitor_inv = coh [ {x} : id(x) -> ucomp [id(x), id(x)]]
-
-def unitor_unit = coh [ {x} : id(ucomp[id(x),id(x)]) -> ucomp[unitor(x), unitor_inv(x)] ]
-
-def unitor_unit_inv = coh [ {x} : ucomp[unitor(x), unitor_inv(x)] -> id(ucomp[id(x),id(x)]) ]
+import eh-common
 
 def wrap_unitor (x : *) (a : ucomp[id(x),id(x)] -> ucomp[id(x),id(x)]) = ucomp [unitor_inv(x), a, unitor(x)]
 
 def whisk_l_norm (x : *) (a : id(x) -> id(x)) = wrap_unitor(x, ucomp[id(x), [a]])
 def whisk_r_norm (x : *) (a : id(x) -> id(x)) = wrap_unitor(x, ucomp[[a], id(x)])
 
-def swap_src {{f{a}g}{h{b}i}} = ucomp [ucomp [[a],h],ucomp [g,[b]]]
 def swap_src_norm (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x)) = ucomp [ whisk_r_norm(x, a) , whisk_l_norm(x, b) ]
 
-def swap_tgt {{f{a}g}{h{b}i}} = ucomp [ucomp [f,[b]], ucomp [[a], i]]
 def swap_tgt_norm (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x)) = ucomp [ whisk_l_norm(x, b) , whisk_r_norm(x, a) ]
-
-def swap = coh [ [[a],[b]] :
-    	       	 swap_src(a,b)
-    	       	 ->
-		 swap_tgt(a,b)
-	       ]
-
-def unitor_l = coh [ {x{f}y} : ucomp [id(x), f] -> f ]
-def unitor_l_inv = coh [ {x{f}y} : f -> ucomp [id(x), f] ]
-
-def unitor_r = coh [ {x{f}y} : ucomp [f, id(y)] -> f ]
-def unitor_r_inv = coh [ {x{f}y} : f -> ucomp [f, id(y)] ]
-
-def unitor_l_compat = coh [ {x} : unitor_l(id(x)) -> unitor(x) ]
-def unitor_r_compat = coh [ {x} : unitor_r(id(x)) -> unitor(x) ]
-def unitor_l_inv_compat = coh [ {x} : unitor_l_inv(id(x)) -> unitor_inv(x) ]
-def unitor_r_inv_compat = coh [ {x} : unitor_r_inv(id(x)) -> unitor_inv(x) ]
-
-def unitor_l_compat_inv = coh [ {x} : unitor(x) -> unitor_l(id(x)) ]
-def unitor_r_compat_inv = coh [ {x} : unitor(x) -> unitor_r(id(x)) ]
-def unitor_l_inv_compat_inv = coh [ {x} : unitor_inv(x) -> unitor_l_inv(id(x)) ]
-def unitor_r_inv_compat_inv = coh [ {x} : unitor_inv(x) -> unitor_r_inv(id(x)) ]
 
 def unitor_2_l = coh [ {x{f{a}g}y} : ucomp [unitor_l_inv(f),ucomp [id(x), [a]], unitor_l(g)] -> a ]
 def unitor_2_l_inv = coh [ {x{f{a}g}y} : a -> ucomp [unitor_l_inv(f),ucomp [id(x), [a]], unitor_l(g)] ]

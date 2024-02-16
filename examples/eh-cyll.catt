@@ -1,0 +1,106 @@
+import eh-common
+
+def whisk_l_coh = coh [ {x{f{a}g}y} : ucomp[a, unitor_l_inv(g)] -> ucomp[unitor_l_inv(f), ucomp[id(x),[a]]] ]
+
+def whisk_l_sq (x : *) (a : id(x) -> id(x)) : ucomp[a,unitor_inv(x)] -> ucomp[unitor_inv(x),ucomp[id(x),[a]]]
+  = ucomp [ ucomp[a, [unitor_l_inv_compat_inv(x)]]
+          , whisk_l_coh(a)
+	  , ucomp[[unitor_l_inv_compat(x)], ucomp[id(x),[a]]]
+          ]
+
+def whisk_r_coh = coh [ {x{f{a}g}y} : ucomp[a, unitor_r_inv(g)] -> ucomp[unitor_r_inv(f), ucomp[[a], id(y)]]]
+
+def whisk_r_sq (x : *) (a : id(x) -> id(x)) : ucomp[a,unitor_inv(x)] -> ucomp[unitor_inv(x),ucomp[[a], id(x)]]
+  = ucomp [ ucomp[a, [unitor_r_inv_compat_inv(x)]]
+          , whisk_r_coh(a)
+	  , ucomp[[unitor_r_inv_compat(x)], ucomp[[a], id(x)]]
+          ]
+
+def whisk_l_coh_inv = coh [ {x{f{a}g}y} : ucomp[ucomp[id(x),[a]], unitor_l(g)] -> ucomp[unitor_l(f), a] ]
+
+def whisk_l_sq_inv (x : *) (a : id(x) -> id(x)) : ucomp[ucomp[id(x),[a]],unitor(x)] -> ucomp[unitor(x),a]
+  = ucomp [ ucomp[ucomp[id(x),[a]], [unitor_l_compat_inv(x)]]
+          , whisk_l_coh_inv(a)
+	  , ucomp[[unitor_l_compat(x)], a]
+          ]
+
+def whisk_r_coh_inv = coh [ {x{f{a}g}y} : ucomp[ucomp[[a], id(y)], unitor_r(g)] -> ucomp[unitor_r(f), a]]
+
+def whisk_r_sq_inv (x : *) (a : id(x) -> id(x)) : ucomp[ucomp[[a], id(x)],unitor(x)] -> ucomp[unitor(x),a]
+  = ucomp [ ucomp[ucomp[[a], id(x)], [unitor_r_compat_inv(x)]]
+          , whisk_r_coh_inv(a)
+	  , ucomp[[unitor_r_compat(x)], a]
+          ]
+
+def assoc = coh [ [f,g,h] : ucomp[ucomp[f,g],h] -> ucomp[f,ucomp[g,h]]]
+def assoc_inv = coh [ [f,g,h] : ucomp[f,ucomp[g,h]] -> ucomp[ucomp[f,g],h]]
+
+def cyl_comp (x : *)
+             (y : *)
+	     (z : *)
+	     (u : *)
+	     (v : *)
+	     (w : *)
+	     (xy : x -> y)
+	     (yz : y -> z)
+	     (uv : u -> v)
+	     (vw : v -> w)
+	     (xu : x -> u)
+	     (yv : y -> v)
+	     (zw : z -> w)
+	     (a : ucomp[xy, yv] -> ucomp[xu, uv])
+	     (b : ucomp[yz, zw] -> ucomp[yv, vw])
+	     : ucomp[ucomp[xy,yz],zw] -> ucomp[xu, ucomp[uv, vw]]
+  = ucomp [ assoc(xy,yz,zw)
+          , ucomp[xy,[b]]
+	  , assoc_inv(xy,yv,vw)
+	  , ucomp[[a], vw]
+	  , assoc(xu,uv,vw)
+          ]
+
+def src (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x)) : ucomp[ucomp[a,b], unitor_inv(x)] -> ucomp[unitor_inv(x), swap_src(a,b)]
+  = cyl_comp(id(x)
+            ,id(x)
+	    ,id(x)
+	    ,ucomp[id(x),id(x)]
+	    ,ucomp[id(x),id(x)]
+	    ,ucomp[id(x),id(x)]
+	    ,a
+	    ,b
+	    ,ucomp[[a],id(x)]
+	    ,ucomp[id(x),[b]]
+	    ,unitor_inv(x)
+	    ,unitor_inv(x)
+	    ,unitor_inv(x)
+	    ,whisk_r_sq(x,a)
+	    ,whisk_l_sq(x,b))
+
+def tgt (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x)) : ucomp[swap_tgt(a,b), unitor(x)] -> ucomp[unitor(x), ucomp[b,a]]
+  = cyl_comp(ucomp[id(x),id(x)]
+            ,ucomp[id(x),id(x)]
+	    ,ucomp[id(x),id(x)]
+            ,id(x)
+   	    ,id(x)
+	    ,id(x)
+	    ,ucomp[id(x),[b]]
+	    ,ucomp[[a],id(x)]
+	    ,b
+	    ,a
+	    ,unitor(x)
+	    ,unitor(x)
+	    ,unitor(x)
+	    ,whisk_l_sq_inv(x,b)
+	    ,whisk_r_sq_inv(x,a))
+
+def eh (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x)) : ucomp[a,b] -> ucomp[b,a]
+  = ucomp [ unitor_r_inv(ucomp[a,b])
+          , ucomp[ucomp[a,b], [unitor_counit(x)]]
+	  , assoc_inv(ucomp[a,b],unitor_inv(x),unitor(x))
+	  , ucomp[[src(x,a,b)], unitor(x)]
+	  , ucomp[[ucomp[unitor_inv(x), [swap(a,b)]]], unitor(x)]
+	  , assoc(unitor_inv(x),swap_tgt(a,b),unitor(x))
+	  , ucomp[unitor_inv(x),[tgt(x,a,b)]]
+	  , assoc_inv(unitor_inv(x),unitor(x),ucomp[b,a])
+	  , ucomp[[unitor_counit_inv(x)], ucomp[b,a]]
+	  , unitor_l(ucomp[b,a])
+          ]

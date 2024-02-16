@@ -149,7 +149,7 @@ pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
 }
 
 impl Command {
-    pub fn run(self, env: &mut Environment) -> Result<(), CattError<Src>> {
+    pub fn run(self, env: &mut Environment, file: Option<&PathBuf>) -> Result<(), CattError<Src>> {
         println!("----------------------------------------");
 
         macro_rules! printtmty {
@@ -360,9 +360,16 @@ impl Command {
                 }
             }
             Command::Import(filename, sp) => {
-                println!("{} {}", "Importing".fg(Color::Green), filename.display());
-                let src = std::fs::read_to_string(&filename)
-                    .map_err(|_| CattError::FileError(filename.clone(), sp))?;
+		let import_file = if let Some(f) = file.and_then(|x| x.parent()) {
+		    let mut x = f.to_path_buf();
+		    x.extend(filename.iter());
+		    x
+		} else {
+		    filename
+		};
+                println!("{} {}", "Importing".fg(Color::Green), import_file.display());
+                let src = std::fs::read_to_string(&import_file)
+                    .map_err(|_| CattError::FileError(import_file.clone(), sp))?;
 
                 let parsed = comment()
                     .ignore_then(command().separated_by(comment()))
@@ -374,13 +381,13 @@ impl Command {
                                 .map(|e| {
                                     Report::build(
                                         ReportKind::Error,
-                                        Src::File(filename.clone()),
+                                        Src::File(import_file.clone()),
                                         e.span().start,
                                     )
                                     .with_message(e.to_string())
                                     .with_label(
                                         ariadne::Label::new((
-                                            Src::File(filename.clone()),
+                                            Src::File(import_file.clone()),
                                             e.span(),
                                         ))
                                         .with_message(format!("{:?}", e.reason()))
@@ -393,10 +400,10 @@ impl Command {
                     })?;
 
                 for cmd in parsed {
-                    match cmd.run(env) {
+                    match cmd.run(env, Some(&import_file)) {
                         Ok(_) => {}
                         Err(e) => {
-                            return Err(CattError::Report(e.to_report(&Src::File(filename))));
+                            return Err(CattError::Report(e.to_report(&Src::File(import_file))));
                         }
                     }
                 }
@@ -404,7 +411,7 @@ impl Command {
                 println!(
                     "{} {}",
                     "Finished importing".fg(Color::Green),
-                    filename.display()
+                    import_file.display()
                 );
             }
         }

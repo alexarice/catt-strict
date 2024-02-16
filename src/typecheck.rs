@@ -79,6 +79,8 @@ pub enum TypeCheckError<S> {
     LocallyMaxMissing(Label<S>, S),
     #[error("Term \"{}\" lives in context \"{}\" but inferred context was \"{}\"", .0.fg(Color::Red), .1.fg(Color::Red), .2.fg(Color::Green))]
     TreeMismatch(Term<S>, Tree<NoDispOption<Name>>, Tree<NoDispOption<Name>>),
+    #[error("Term \"{}\" was given the wrong number of arguments", .0.fg(Color::Red))]
+    WrongArgs(Term<S>, usize, S, usize),
     #[error("Cannot check hole")]
     Hole(S),
 }
@@ -94,6 +96,7 @@ impl TypeCheckError<Range<usize>> {
             | TypeCheckError::DimensionMismatch(_, s)
             | TypeCheckError::LocallyMaxMissing(_, s)
             | TypeCheckError::Hole(s)
+            | TypeCheckError::WrongArgs(_, _, s, _)
             | TypeCheckError::IdNotDisc(s, _) => s,
             TypeCheckError::Fullness(ty)
             | TypeCheckError::TypeMismatch(ty, _)
@@ -239,6 +242,18 @@ impl TypeCheckError<Range<usize>> {
                     .with_message("Term does not live over correct tree")
                     .with_color(Color::Red),
             ),
+            TypeCheckError::WrongArgs(t, x, sp, y) => {
+                report.add_label(
+                    ariadne::Label::new((src.clone(), t.span().clone()))
+                        .with_message(format!("Term expected {x} arguments"))
+                        .with_color(Color::Red),
+                );
+                report.add_label(
+                    ariadne::Label::new((src.clone(), sp))
+                        .with_message(format!("and was given {y} arguments"))
+                        .with_color(Color::Green),
+                );
+            }
             TypeCheckError::Hole(sp) => report.add_label(
                 ariadne::Label::new((src.clone(), sp))
                     .with_message("Hole cannot be inferred")
@@ -309,6 +324,9 @@ impl<S: Clone + Debug> Term<S> {
     ) -> Result<(TermT<T>, TypeT<T>), TypeCheckError<S>> {
         match self {
             Term::Hole(sp) => Err(TypeCheckError::Hole(sp.clone())),
+            Term::Var(x, sp) if !local.map.contains_key(x) && !env.top_level.contains_key(x) => {
+                Err(TypeCheckError::UnknownLocal(x.clone(), sp.clone()))
+            }
             Term::Var(x, sp) if local.map.contains_key(x) => local
                 .map
                 .get(x)
@@ -348,6 +366,14 @@ impl<S: Clone + Debug> Term<S> {
                             ))
                         }
                         Either::Right(InferRes { ctx, tm, ty }) => {
+                            if sub.len() != ctx.len() {
+                                return Err(TypeCheckError::WrongArgs(
+                                    *head.clone(),
+                                    ctx.len(),
+                                    sp.clone(),
+                                    sub.len(),
+                                ));
+                            }
                             let (subt, tys): (Vec<TermT<T>>, Vec<_>) = sub
                                 .iter()
                                 .map(|t| Ok((t.check(env, local)?, t)))

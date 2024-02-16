@@ -93,7 +93,7 @@ fn main() {
 
     for path in args.imports {
         let string = path.to_str().unwrap().to_owned();
-        match Command::Import(path, 0..string.len()).run(&mut env) {
+        match Command::Import(path, 0..string.len()).run(&mut env, None) {
             Ok(_) => {}
             Err(err) => err
                 .to_report(&Src::Import(string))
@@ -120,7 +120,7 @@ fn main() {
                     } else {
                         rl.history_mut().add(&s).unwrap();
                         match command().then_ignore(end()).parse(s.trim()) {
-                            Ok(command) => match command.run(&mut env) {
+                            Ok(command) => match command.run(&mut env, None) {
                                 Ok(_) => {}
                                 Err(err) => err
                                     .to_report(&Src::Repl(s.clone()))

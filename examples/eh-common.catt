@@ -1,0 +1,37 @@
+// Catt proof of eh
+
+def swap_src {{f{a}g}{h{b}i}} = ucomp [ucomp [[a],h],ucomp [g,[b]]]
+def swap_tgt {{f{a}g}{h{b}i}} = ucomp [ucomp [f,[b]], ucomp [[a], i]]
+
+def swap = coh [ [[a],[b]] :
+    	       	 swap_src(a,b)
+    	       	 ->
+		 swap_tgt(a,b)
+	       ]
+
+def unitor = coh [ {x} : ucomp [id(x), id(x)] -> id(x)]
+def unitor_inv = coh [ {x} : id(x) -> ucomp [id(x), id(x)]]
+
+def unitor_unit = coh [ {x} : id(ucomp[id(x),id(x)]) -> ucomp[unitor(x), unitor_inv(x)] ]
+
+def unitor_unit_inv = coh [ {x} : ucomp[unitor(x), unitor_inv(x)] -> id(ucomp[id(x),id(x)]) ]
+
+def unitor_counit = coh [ {x} : id(id(x)) -> ucomp[unitor_inv(x), unitor(x)]]
+
+def unitor_counit_inv = coh [ {x} : ucomp[unitor_inv(x), unitor(x)] -> id(id(x))]
+
+def unitor_l = coh [ {x{f}y} : ucomp [id(x), f] -> f ]
+def unitor_l_inv = coh [ {x{f}y} : f -> ucomp [id(x), f] ]
+
+def unitor_r = coh [ {x{f}y} : ucomp [f, id(y)] -> f ]
+def unitor_r_inv = coh [ {x{f}y} : f -> ucomp [f, id(y)] ]
+
+def unitor_l_compat = coh [ {x} : unitor_l(id(x)) -> unitor(x) ]
+def unitor_r_compat = coh [ {x} : unitor_r(id(x)) -> unitor(x) ]
+def unitor_l_inv_compat = coh [ {x} : unitor_l_inv(id(x)) -> unitor_inv(x) ]
+def unitor_r_inv_compat = coh [ {x} : unitor_r_inv(id(x)) -> unitor_inv(x) ]
+
+def unitor_l_compat_inv = coh [ {x} : unitor(x) -> unitor_l(id(x)) ]
+def unitor_r_compat_inv = coh [ {x} : unitor(x) -> unitor_r(id(x)) ]
+def unitor_l_inv_compat_inv = coh [ {x} : unitor_inv(x) -> unitor_l_inv(id(x)) ]
+def unitor_r_inv_compat_inv = coh [ {x} : unitor_inv(x) -> unitor_r_inv(id(x)) ]
