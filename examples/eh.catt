@@ -58,3 +58,4 @@ def eh (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x)) : ucomp[a,b] -> ucomp[b
           ]
 
 normalise (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x)) | eh(x,a,b)
+size (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x)) | eh(x,a,b)

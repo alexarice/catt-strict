@@ -101,6 +101,7 @@ pub enum Command {
     ),
     Normalise(Ctx<Range<usize>>, Term<Range<usize>>),
     AssertEq(Ctx<Range<usize>>, Term<Range<usize>>, Term<Range<usize>>),
+    Size(Ctx<Range<usize>>, Term<Range<usize>>),
     Import(PathBuf, Range<usize>),
 }
 
@@ -133,6 +134,10 @@ pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
                     .then(just("=").ignore_then(term().padded_by(comment()))),
             )
             .map(|(ctx, (tm1, tm2))| Command::AssertEq(ctx, tm1, tm2)))
+	.or(just("size ")
+	    .ignore_then(ctx().padded_by(comment()))
+	    .then(just("|").ignore_then(term().padded_by(comment())))
+	    .map(|(ctx,tm)| Command::Size(ctx,tm)))
         .or(just("import ").ignore_then(
             text::whitespace()
                 .at_least(1)
@@ -301,6 +306,43 @@ impl Command {
                     }
                 }
             }
+	    Command::Size(ctx, tm) => {
+		println!("{} {tm}", "Normalising".fg(Color::Green));
+                let local = ctx.check(env)?;
+                macro_rules! get_size {
+                    ($l:expr) => {
+                        let (tmt, _) = tm.check(env, &$l)?;
+                        let sem_ctx = $l.ctx.id_sem_ctx();
+                        let tmn = tmt.eval(&sem_ctx, env);
+                        println!(
+                            "{}",
+                            RcDoc::group(
+                                RcDoc::text("Term:".fg(Color::Blue).to_string())
+                                    .append(
+                                        RcDoc::line()
+                                            .append(
+                                                tm.to_doc()
+                                            )
+                                            .nest(2)
+                                    )
+                                    .append(RcDoc::line())
+                                    .append(RcDoc::group(
+                                        RcDoc::text(format!("{} {}", "has size:".fg(Color::Blue), tmn.size()))
+                                    ))
+                            )
+                            .pretty(80)
+                        );
+                    };
+                }
+                match local {
+                    Either::Left(local) => {
+                        get_size!(local);
+                    }
+                    Either::Right(local) => {
+                        get_size!(local);
+                    }
+                }
+	    }
             Command::AssertEq(ctx, tm1, tm2) => {
                 println!(
                     "{} {tm1} {} {tm2}",

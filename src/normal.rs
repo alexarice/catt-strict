@@ -41,6 +41,16 @@ impl<T> Deref for TypeN<T> {
     }
 }
 
+impl HeadN {
+    pub(crate) fn size(&self) -> usize {
+        match self {
+            HeadN::CohN { ty, .. } => 1 + ty.size(),
+            HeadN::UCohN { .. } => 1,
+            HeadN::IdN { .. } => 1,
+        }
+    }
+}
+
 impl<T> TermN<T> {
     pub(crate) fn into_args(self, ty: TypeN<T>) -> Tree<TermN<T>> {
         ty.0.into_iter()
@@ -48,6 +58,13 @@ impl<T> TermN<T> {
                 elements: vec![s, t],
                 branches: vec![tr],
             })
+    }
+
+    pub(crate) fn size(&self) -> usize {
+        match self {
+            TermN::Variable(_) => 0,
+            TermN::Other(h, tr) => h.size() + tr.get_paths().into_iter().map(|(_, tm)| tm.size()).sum::<usize>(),
+        }
     }
 }
 
@@ -73,6 +90,10 @@ impl<T> TypeN<T> {
 
     pub(crate) fn dim(&self) -> usize {
         self.0.len()
+    }
+
+    pub(crate) fn size(&self) -> usize {
+	self.0.iter().map(|(s,t)| s.size() + t.size()).sum()
     }
 }
 
@@ -128,10 +149,10 @@ impl TypeN<Path> {
     }
 
     pub(crate) fn is_unbiased<T>(&self, tree: &Tree<T>) -> bool {
-	let dim = tree.dim();
-	if dim != self.dim() {
-	    return false;
-	}
+        let dim = tree.dim();
+        if dim != self.dim() {
+            return false;
+        }
         if let Some((s, t)) = self.0.last() {
             let path_tree = tree.path_tree().map(&TermN::Variable);
             let src = path_tree.bdry(dim - 1, false);
