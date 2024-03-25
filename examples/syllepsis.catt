@@ -89,3 +89,7 @@ normalise (x : *) (a : id(id(x)) -> id(id(x))) (b : id(id(x)) -> id(id(x))) | ri
 def syllepsis (x : *) (a : id(id(x)) -> id(id(x))) (b : id(id(x)) -> id(id(x)))
   : swap(a,b) -> swapinv(b,a)
   = syl_coh(a,b)
+
+import syllepsis-su
+
+assert (x : *) (a : id(id(x)) -> id(id(x))) (b : id(id(x)) -> id(id(x))) | syllepsis(x,a,b) = syllepsis_su(x,a,b)
