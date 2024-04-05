@@ -1,78 +1,76 @@
 // Syllepsis - needs --sua flag
 
-def id = coh [ {x} : x -> x ]
-
 def swap = coh [ {x{f{a}g}y{h{b}k}z}
-               : ucomp[ucomp [[a],h], ucomp[g,[b]]]
+               : comp[comp [[a],h], comp[g,[b]]]
                  ->
-                 ucomp[ucomp [f,[b]], ucomp [[a],k]]
+                 comp[comp [f,[b]], comp [[a],k]]
                ]
 
 def swapinv = coh [ {x{f{a}g}y{h{b}k}z}
-                  : ucomp[ucomp[f,[b]], ucomp[[a],k]]
+                  : comp[comp[f,[b]], comp[[a],k]]
                     ->
-                    ucomp[ucomp[[a],h], ucomp[g,[b]]]
+                    comp[comp[[a],h], comp[g,[b]]]
                   ]
 
 def swapnatleft = coh [ {u{x{f{a}g}y}v{s{h}t}w}
-                      : ucomp[ ucomp [ [ucomp [[[a]],s]],
-		      	       	       ucomp [y,[h]]
+                      : comp[ comp [ [comp [[[a]],s]],
+		      	       	       comp [y,[h]]
 				     ],
 			       swap(g,h)
 			     ]
                         ->
-                        ucomp[ swap(f,h),
-			       ucomp[ ucomp [x,[h]],
-			              [ucomp[[[a]],t]]
+                        comp[ swap(f,h),
+			       comp[ comp [x,[h]],
+			              [comp[[[a]],t]]
 				    ]
 			     ]
                       ]
 
 def swapnatright = coh [ {u{x{g}y}v{s{h{b}k}t}w}
-                       : ucomp[ ucomp [ ucomp [[g],s],
-		       	 	        [ucomp[y,[[b]]]]
+                       : comp[ comp [ comp [[g],s],
+		       	 	        [comp[y,[[b]]]]
 			              ],
 			        swap(g,k)
 			      ]
                          ->
-                         ucomp[ swap(g,h),
-			        ucomp[ [ucomp[x,[[b]]]],
-				       ucomp[[g],t]
+                         comp[ swap(g,h),
+			        comp[ [comp[x,[[b]]]],
+				       comp[[g],t]
 				     ]
 		              ]
                        ]
 
 def left {u{x{f{a}g}y}v{s{h{b}k}t}w}
-  = ucomp [
-            ucomp [
-		    [swap(ucomp[[[a]],s], ucomp[y,[[b]]])],
+  = comp [
+            comp [
+		    [swap(comp[[[a]],s], comp[y,[[b]]])],
 		    swap(g,k)
 		  ],
-	    ucomp [
-		    ucomp [ucomp [[f],s], [ucomp [y,[[b]]]]],
+	    comp [
+		    comp [comp [[f],s], [comp [y,[[b]]]]],
 		    [swapnatleft(a,k)]
 		  ],
-	    ucomp [
+	    comp [
 		    [swapnatright(f,b)],
-		    ucomp [ucomp [x,[k]], [ucomp [[[a]],t]]]
+		    comp [comp [x,[k]], [comp [[[a]],t]]]
 		  ]
 	  ]
 
 
 
 def right {u{x{f{a}g}y}v{s{h{b}k}t}w}
-  = ucomp [
-	    ucomp [
-		    ucomp [[ucomp [[[a]],s]], ucomp [y,[h]]],
+  = comp [
+	    comp [
+		    comp [[comp [[[a]],s]], comp [y,[h]]],
 		    [swapnatright(g,b)]
 		  ],
-	    ucomp [
+	    comp [
 		    [swapnatleft(a,h)],
-		    ucomp [[ucomp [x,[[b]]]], ucomp [[g],t]]
+		    comp [[comp [x,[[b]]]], comp [[g],t]]
 		  ],
-	    ucomp [
+	    comp [
 		    swap(f,h),
-		    [swapinv(ucomp[x,[[b]]], ucomp[[[a]],t])]
+		    [swapinv(comp[x,[[b]]], comp[[[a]],t])]
 		  ]
 	  ]
 
@@ -89,8 +87,6 @@ normalise (x : *) (a : id(id(x)) -> id(id(x))) (b : id(id(x)) -> id(id(x))) | ri
 def syllepsis (x : *) (a : id(id(x)) -> id(id(x))) (b : id(id(x)) -> id(id(x)))
   : swap(a,b) -> swapinv(b,a)
   = syl_coh(a,b)
-
-
 
 import syllepsis-su
 

@@ -87,7 +87,7 @@ impl<T> Tree<TermN<T>> {
         let v = self.get_maximal_with_branching();
         v.into_iter().find_map(|(p, bh, tm)| match tm {
             TermN::Other(HeadN::IdN { dim }, args) => Some((p, Tree::disc(*dim), args.clone())),
-            TermN::Other(HeadN::UCohN { tree }, args) if insertion == &Insertion::Full => tree
+            TermN::Other(HeadN::CompN { tree }, args) if insertion == &Insertion::Full => tree
                 .has_trunk_height(bh)
                 .then_some((p, tree.clone(), args.clone())),
             _ => None,
@@ -158,7 +158,7 @@ fn eval_coh<T: Clone>(
         if env.reduction.disc_rem && tree.is_disc() {
             return args.unwrap_disc();
         }
-        return TermN::Other(HeadN::UCohN { tree }, args);
+        return TermN::Other(HeadN::CompN { tree }, args);
     }
 
     TermN::Other(HeadN::CohN { tree, ty: tyn }, args)
@@ -179,9 +179,9 @@ impl Eval for Path {
             TermT::TopLvl(_, tmt) => tmt.eval(ctx, env),
             TermT::Susp(t) => t.eval(&ctx.clone().restrict(), env),
             TermT::Include(t, rng) => t.eval(&ctx.clone().include(rng), env),
-            TermT::UComp(tr) => eval_coh(tr.clone(), None, ctx, env),
+            TermT::Comp(tr) => eval_coh(tr.clone(), None, ctx, env),
             TermT::Coh(tr, ty) => eval_coh(tr.clone(), Some(*ty.clone()), ctx, env),
-            TermT::IdT(dim) => {
+            TermT::Id(dim) => {
                 let (args, res_dim) = ctx.clone().into_args();
                 TermN::Other(HeadN::IdN { dim: res_dim + dim }, args)
             }
@@ -281,8 +281,8 @@ impl HeadN {
     pub(crate) fn quote(&self) -> TermT<Path> {
         match self {
             HeadN::CohN { tree, ty } => TermT::Coh(tree.clone(), Box::new(ty.quote())),
-            HeadN::UCohN { tree } => TermT::UComp(tree.clone()),
-            HeadN::IdN { dim } => TermT::IdT(*dim),
+            HeadN::CompN { tree } => TermT::Comp(tree.clone()),
+            HeadN::IdN { dim } => TermT::Id(*dim),
         }
     }
 }

@@ -12,7 +12,7 @@ use crate::term::ArgsT;
 use crate::{
     common::{Name, NoDispOption, Spanned, Tree},
     normal::TypeN,
-    syntax::{Args, Ctx, Label, Sub, Term, Type},
+    syntax::{ArgsE, CtxE, LabelE, SubE, TermE, TypeE},
     term::{ArgsWithTypeT, TermT, TypeT},
 };
 
@@ -48,39 +48,39 @@ pub enum TypeCheckError<S> {
     #[error("Unknown local variable: \"{}\"", .0.fg(Color::Red))]
     UnknownLocal(Name, S),
     #[error("Type \"{}\" does not satisfy fullness condition", .0.fg(Color::Red))]
-    Fullness(Type<S>),
+    Fullness(TypeE<S>),
     #[error("Cannot infer context for term \"{}\"", .0.fg(Color::Red))]
-    CannotInferCtx(Term<S>),
+    CannotInferCtx(TermE<S>),
     #[error("Cannot check context for inferrable term \"{}\"", .0.fg(Color::Red))]
-    CannotCheckCtx(Term<S>),
+    CannotCheckCtx(TermE<S>),
     #[error("Identity does not exist in context \"{}\"", .1.fg(Color::Red))]
     IdNotDisc(S, Tree<NoDispOption<Name>>),
     #[error("Type \"{}\" is not checkable", .0.fg(Color::Red))]
-    CannotCheck(Type<S>),
+    CannotCheck(TypeE<S>),
     #[error("Terms \"{}\" and \"{}\" do not have matching types", .0.fg(Color::Blue), .2.fg(Color::Magenta))]
-    InferredTypesNotEqual(Term<S>, Type<()>, Term<S>, Type<()>, S),
+    InferredTypesNotEqual(TermE<S>, TypeE<()>, TermE<S>, TypeE<()>, S),
     #[error("Term \"{}\" had inferred type \"{}\" but should have type \"{}\"", .0.fg(Color::Red), .1.fg(Color::Red), .2.fg(Color::Green))]
-    InferredTypeWrong(Term<S>, Type<()>, Type<S>),
+    InferredTypeWrong(TermE<S>, TypeE<()>, TypeE<S>),
     #[error("Term \"{}\" had inferred type \"{}\" but should have type \"{}\"", .0.fg(Color::Red), .1.fg(Color::Red), .2.fg(Color::Green))]
-    InferredTypeWrongCalc(Term<S>, Type<()>, Type<()>),
+    InferredTypeWrongCalc(TermE<S>, TypeE<()>, TypeE<()>),
     #[error("Given type \"{}\" does not match inferred type \"{}\"", .0.fg(Color::Red), .1.fg(Color::Green))]
-    TypeMismatch(Type<S>, Type<()>),
+    TypeMismatch(TypeE<S>, TypeE<()>),
     #[error("Given term \"{}\" does not match inferred term \"{}\"", .0.fg(Color::Red), .1.fg(Color::Green))]
-    TermMismatch(Term<S>, Term<()>),
+    TermMismatch(TermE<S>, TermE<()>),
     #[error("Mismatch between inferred terms \"{}\" and \"{}\" in labelling \"{}\"", .1.fg(Color::Magenta), .2.fg(Color::Blue), .0.fg(Color::Red))]
-    LabelMismatch(Label<S>, Term<()>, Term<()>, S),
+    LabelMismatch(LabelE<S>, TermE<()>, TermE<()>, S),
     #[error("Dimension mismatch in labeling \"{}\"", .0.fg(Color::Red))]
-    DimensionMismatch(Label<S>, S),
+    DimensionMismatch(LabelE<S>, S),
     #[error("Substitution \"{}\" cannot be coerced to labelling", .0.fg(Color::Red))]
-    SubToLabel(Args<S>, S),
+    SubToLabel(ArgsE<S>, S),
     #[error("Term \"{}\" should live over tree \"{}\"", .0.fg(Color::Red), .1.fg(Color::Green))]
-    TermNotTree(Term<S>, Tree<NoDispOption<Name>>),
+    TermNotTree(TermE<S>, Tree<NoDispOption<Name>>),
     #[error("Locally maximal argument missing from labelling \"{}\"", .0.fg(Color::Red))]
-    LocallyMaxMissing(Label<S>, S),
+    LocallyMaxMissing(LabelE<S>, S),
     #[error("Term \"{}\" lives in context \"{}\" but inferred context was \"{}\"", .0.fg(Color::Red), .1.fg(Color::Red), .2.fg(Color::Green))]
-    TreeMismatch(Term<S>, Tree<NoDispOption<Name>>, Tree<NoDispOption<Name>>),
+    TreeMismatch(TermE<S>, Tree<NoDispOption<Name>>, Tree<NoDispOption<Name>>),
     #[error("Term \"{}\" was given the wrong number of arguments", .0.fg(Color::Red))]
-    WrongArgs(Term<S>, usize, S, usize),
+    WrongArgs(TermE<S>, usize, S, usize),
     #[error("Cannot check hole")]
     Hole(S),
 }
@@ -264,15 +264,15 @@ impl TypeCheckError<Range<usize>> {
     }
 }
 
-impl<S: Clone + Debug> Term<S> {
+impl<S: Clone + Debug> TermE<S> {
     pub(crate) fn infer(&self, env: &Environment) -> Result<InferResEither, TypeCheckError<S>> {
         match self {
-            Term::Hole(sp) => Err(TypeCheckError::Hole(sp.clone())),
-            Term::Susp(t, _) => {
+            TermE::Hole(sp) => Err(TypeCheckError::Hole(sp.clone())),
+            TermE::Susp(t, _) => {
                 let res = t.infer(env)?;
                 Ok(res.map_either(InferRes::susp, InferRes::susp))
             }
-            Term::Var(x, sp) => env
+            TermE::Var(x, sp) => env
                 .top_level
                 .get(x)
                 .cloned()
@@ -291,7 +291,7 @@ impl<S: Clone + Debug> Term<S> {
                     )
                 })
                 .ok_or(TypeCheckError::UnknownTopLevel(x.clone(), sp.clone())),
-            Term::Coh(tr, ty, _) => {
+            TermE::Coh(tr, ty, _) => {
                 let (tyt, tyn) = ty.infer(env, &tr.to_map())?;
 
                 if !tyn.support_check(tr, &env.support) {
@@ -304,9 +304,9 @@ impl<S: Clone + Debug> Term<S> {
                     ty: tyt,
                 }))
             }
-            Term::Id(_) => Ok(Either::Left(InferRes {
+            TermE::Id(_) => Ok(Either::Left(InferRes {
                 ctx: Tree::singleton(NoDispOption(None)),
-                tm: TermT::IdT(0),
+                tm: TermT::Id(0),
                 ty: TypeT::Arr(
                     TermT::Var(Path::here(0)),
                     Box::new(TypeT::Base),
@@ -323,32 +323,32 @@ impl<S: Clone + Debug> Term<S> {
         local: &Local<T>,
     ) -> Result<(TermT<T>, TypeT<T>), TypeCheckError<S>> {
         match self {
-            Term::Hole(sp) => Err(TypeCheckError::Hole(sp.clone())),
-            Term::Var(x, sp) if !local.map.contains_key(x) && !env.top_level.contains_key(x) => {
+            TermE::Hole(sp) => Err(TypeCheckError::Hole(sp.clone())),
+            TermE::Var(x, sp) if !local.map.contains_key(x) && !env.top_level.contains_key(x) => {
                 Err(TypeCheckError::UnknownLocal(x.clone(), sp.clone()))
             }
-            Term::Var(x, sp) if local.map.contains_key(x) => local
+            TermE::Var(x, sp) if local.map.contains_key(x) => local
                 .map
                 .get(x)
                 .map(|(p, ty)| (TermT::Var(p.clone()), ty.clone()))
                 .ok_or_else(|| TypeCheckError::UnknownLocal(x.clone(), sp.clone())),
-            t @ Term::UComp(_) => local.ctx.check_in_tree(t, |tr| {
-                Ok((TermT::UComp(tr.clone()), tr.unbiased_type(tr.dim())))
+            t @ TermE::Comp(_) => local.ctx.check_in_tree(t, |tr| {
+                Ok((TermT::Comp(tr.clone()), tr.unbiased_type(tr.dim())))
             }),
-            t @ Term::Id(sp) => local.ctx.check_in_tree(t, |tr| {
+            t @ TermE::Id(sp) => local.ctx.check_in_tree(t, |tr| {
                 if tr.is_disc() {
                     let d = tr.dim();
-                    Ok((TermT::IdT(d), tr.unbiased_type(d + 1)))
+                    Ok((TermT::Id(d), tr.unbiased_type(d + 1)))
                 } else {
                     Err(TypeCheckError::IdNotDisc(sp.clone(), tr.clone()))
                 }
             }),
-            Term::App(head, args, _) => match &args.args {
-                Args::Sub(Spanned(sub, sp)) => {
+            TermE::App(head, args, _) => match &args.args {
+                ArgsE::Sub(Spanned(sub, sp)) => {
                     let res = head.infer(env)?;
                     match res {
                         Either::Left(InferRes { ctx, tm, ty }) => {
-                            let label = Label::from_sub(sub, &ctx, sp)?;
+                            let label = LabelE::from_sub(sub, &ctx, sp)?;
                             let (l, lty) = label.infer(env, local, sp)?;
 
                             if let Some(t) = &args.ty {
@@ -417,7 +417,7 @@ impl<S: Clone + Debug> Term<S> {
                         }
                     }
                 }
-                Args::Label(Spanned(l, sp)) => {
+                ArgsE::Label(Spanned(l, sp)) => {
                     let (tmt, tyt) =
                         head.check(env, &l.map_ref(&|_| NoDispOption(None)).to_map())?;
                     let (lt, tyn) = l.infer(env, local, sp)?;
@@ -454,15 +454,15 @@ impl<S: Clone + Debug> Term<S> {
     }
 }
 
-impl<S: Clone + Debug> Type<S> {
+impl<S: Clone + Debug> TypeE<S> {
     pub(crate) fn infer<T: Eval>(
         &self,
         env: &Environment,
         local: &Local<T>,
     ) -> Result<(TypeT<T>, TypeN<T>), TypeCheckError<S>> {
         match self {
-            Type::Base(_) => Ok((TypeT::Base, TypeN(vec![]))),
-            Type::Arr(s, a, t, sp) => {
+            TypeE::Base(_) => Ok((TypeT::Base, TypeN(vec![]))),
+            TypeE::Arr(s, a, t, sp) => {
                 let (st, ty1) = s.check(env, local)?;
                 let (tt, ty2) = t.check(env, local)?;
                 let sem_ctx = local.ctx.id_sem_ctx();
@@ -510,15 +510,15 @@ impl<S: Clone + Debug> Type<S> {
         ty: &TypeNRef<T>,
     ) -> Result<(), TypeCheckError<S>> {
         match self {
-            Type::Hole(_) => Ok(()),
-            Type::Arr(s, a, t, _) => {
+            TypeE::Hole(_) => Ok(()),
+            TypeE::Arr(s, a, t, _) => {
                 let (sn, tn) = ty.0.last().ok_or(TypeCheckError::TypeMismatch(
                     self.clone(),
                     ty.quote().to_expr(Some(&local.ctx), env.implicits),
                 ))?;
 
                 let sem_ctx = local.ctx.id_sem_ctx();
-                if !matches!(s, Term::Hole(_)) {
+                if !matches!(s, TermE::Hole(_)) {
                     let (st, _) = s.check(env, local)?;
                     let stn = st.eval(&sem_ctx, env);
                     if &stn != sn {
@@ -527,7 +527,7 @@ impl<S: Clone + Debug> Type<S> {
                     }
                 }
 
-                if !matches!(t, Term::Hole(_)) {
+                if !matches!(t, TermE::Hole(_)) {
                     let (tt, _) = t.check(env, local)?;
                     if &tt.eval(&sem_ctx, env) != tn {
                         let x = tn.quote().to_expr(Some(&local.ctx), env.implicits);
@@ -537,7 +537,7 @@ impl<S: Clone + Debug> Type<S> {
 
                 if let Some(inner) = a {
                     if ty.0.is_empty() {
-                        return Err(TypeCheckError::TypeMismatch(self.clone(), Type::Base(())));
+                        return Err(TypeCheckError::TypeMismatch(self.clone(), TypeE::Base(())));
                     }
                     inner.check(env, local, ty.inner())?;
                 }
@@ -556,11 +556,11 @@ impl<S: Clone + Debug> Type<S> {
     }
 }
 
-impl<S: Clone + Debug> Label<S> {
-    fn from_sub<T>(sub: &Sub<S>, tree: &Tree<T>, sp: &S) -> Result<Self, TypeCheckError<S>> {
+impl<S: Clone + Debug> LabelE<S> {
+    fn from_sub<T>(sub: &SubE<S>, tree: &Tree<T>, sp: &S) -> Result<Self, TypeCheckError<S>> {
         let mut iter = sub.iter().cloned();
         tree.label_from_max(&mut iter).ok_or_else(|| {
-            TypeCheckError::SubToLabel(Args::Sub(Spanned(sub.clone(), sp.clone())), sp.clone())
+            TypeCheckError::SubToLabel(ArgsE::Sub(Spanned(sub.clone(), sp.clone())), sp.clone())
         })
     }
 
@@ -633,14 +633,14 @@ impl<S: Clone + Debug> Label<S> {
     }
 }
 
-impl<S: Clone + Debug> Ctx<S> {
+impl<S: Clone + Debug> CtxE<S> {
     pub(crate) fn check(
         &self,
         env: &Environment,
     ) -> Result<Either<Local<Path>, Local<Level>>, TypeCheckError<S>> {
         match self {
-            Ctx::Tree(tr) => Ok(Either::Left(tr.to_map())),
-            Ctx::Other(ctx) => {
+            CtxE::Tree(tr) => Ok(Either::Left(tr.to_map())),
+            CtxE::Other(ctx) => {
                 let mut local: Local<Level> = Local {
                     ctx: vec![],
                     map: HashMap::new(),

@@ -1,9 +1,9 @@
-def t {{f{a}g}{h{b}i}} = ucomp [ucomp [[a],h], ucomp [g,[b]]]
+def t {{f{a}g}{h{b}i}} = comp [comp [[a],h], comp [g,[b]]]
 
 def endo_coh = coh [ [[a],[b]] : t(a,b) -> t(a,b) ]
 
 normalise [[a],[b]] | endo_coh(a,b)
 
-def test [[[c]],[a],[b]] = ucomp [[[c]],[[endo_coh(a,b)]]]
+def test [[[c]],[a],[b]] = comp [[[c]],[[endo_coh(a,b)]]]
 
 normalise [[[c]],[a],[b]] | test(c,a,b)

@@ -1,19 +1,19 @@
 // Basic monoidal category definitions
 
-def comp [f,g] = ucomp
+def comp1 [f,g] = comp
 
-normalise [f,g,h] | comp(comp(f,g),h)
+normalise [f,g,h] | comp1(comp1(f,g),h)
 
-def horiz [[a],[b]] = ucomp
+def horiz [[a],[b]] = comp
 
-def unitor_l = coh [ {x{f}y} : comp(id(x),f) -> f ]
+def unitor_l = coh [ {x{f}y} : comp1(id(x),f) -> f ]
 
-def unitor_r = coh [ {x{f}y} : comp(f, id(y)) -> f ]
+def unitor_r = coh [ {x{f}y} : comp1(f, id(y)) -> f ]
 
-def assoc = coh [ {x{f}y{g}z{h}w} : comp(comp(f,g),h) -> comp(f,comp(g,h)) ]
+def assoc = coh [ {x{f}y{g}z{h}w} : comp1(comp1(f,g),h) -> comp1(f,comp1(g,h)) ]
 
 def triangle = coh [ {x{f}y{g}z}
-                   : comp(assoc(f,id(y),g), horiz(id(f),unitor_l(g)))
+                   : comp1(assoc(f,id(y),g), horiz(id(f),unitor_l(g)))
                      ->
                      horiz(unitor_r(f),id(g))
                    ]
@@ -21,8 +21,8 @@ def triangle = coh [ {x{f}y{g}z}
 normalise {x{f}y{g}z} | triangle(f,g)
 
 def pentagon = coh [ {v{f}w{g}x{h}y{i}z}
-    	       	   : comp(assoc(comp(f,g),h,i),assoc(f,g,comp(h,i)))
+    	       	   : comp1(assoc(comp1(f,g),h,i),assoc(f,g,comp1(h,i)))
 		     ->
-		     comp(horiz(assoc(f,g,h),id(i)), comp(assoc(f,comp(g,h),i),horiz(id(f),assoc(g,h,i)))) ]
+		     comp1(horiz(assoc(f,g,h),id(i)), comp1(assoc(f,comp1(g,h),i),horiz(id(f),assoc(g,h,i)))) ]
 
 normalise {v{f}w{g}x{h}y{i}z} | pentagon(f,g,h,i)

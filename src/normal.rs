@@ -12,7 +12,7 @@ pub enum HeadN {
         tree: Tree<NoDispOption<Name>>,
         ty: TypeN<Path>,
     },
-    UCohN {
+    CompN {
         tree: Tree<NoDispOption<Name>>,
     },
     IdN {
@@ -45,7 +45,7 @@ impl HeadN {
     pub(crate) fn size(&self) -> usize {
         match self {
             HeadN::CohN { ty, .. } => 1 + ty.size(),
-            HeadN::UCohN { .. } => 1,
+            HeadN::CompN { .. } => 1,
             HeadN::IdN { .. } => 1,
         }
     }
@@ -158,7 +158,7 @@ impl TypeN<Path> {
             let src = path_tree.bdry(dim - 1, false);
             let src_correct = if let Some(x) = src.get_max() {
                 s == x
-            } else if let TermN::Other(HeadN::UCohN { .. }, args) = s {
+            } else if let TermN::Other(HeadN::CompN { .. }, args) = s {
                 args == &src
             } else {
                 false
@@ -169,7 +169,7 @@ impl TypeN<Path> {
             let tgt = path_tree.bdry(dim - 1, true);
             let tgt_correct = if let Some(x) = tgt.get_max() {
                 t == x
-            } else if let TermN::Other(HeadN::UCohN { .. }, args) = t {
+            } else if let TermN::Other(HeadN::CompN { .. }, args) = t {
                 args == &tgt
             } else {
                 false

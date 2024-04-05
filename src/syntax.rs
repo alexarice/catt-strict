@@ -6,75 +6,75 @@ use std::{
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ArgsWithType<S> {
-    pub(crate) args: Args<S>,
-    pub(crate) ty: Option<Box<Type<S>>>,
+pub struct ArgsWithTypeE<S> {
+    pub(crate) args: ArgsE<S>,
+    pub(crate) ty: Option<Box<TypeE<S>>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Term<S> {
-    App(Box<Term<S>>, ArgsWithType<S>, S),
-    Susp(Box<Term<S>>, S),
+pub enum TermE<S> {
+    App(Box<TermE<S>>, ArgsWithTypeE<S>, S),
+    Susp(Box<TermE<S>>, S),
     Var(Name, S),
-    Coh(Tree<NoDispOption<Name>>, Box<Type<S>>, S),
-    Include(Box<Term<S>>, RangeInclusive<usize>, S),
-    UComp(S),
+    Coh(Tree<NoDispOption<Name>>, Box<TypeE<S>>, S),
+    Include(Box<TermE<S>>, RangeInclusive<usize>, S),
+    Comp(S),
     Id(S),
     Hole(S),
 }
 
-pub type Sub<S> = Vec<Term<S>>;
-pub type Label<S> = Tree<NoDispOption<Term<S>>>;
+pub type SubE<S> = Vec<TermE<S>>;
+pub type LabelE<S> = Tree<NoDispOption<TermE<S>>>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Args<S> {
-    Sub(Spanned<Sub<S>, S>),
-    Label(Spanned<Label<S>, S>),
+pub enum ArgsE<S> {
+    Sub(Spanned<SubE<S>, S>),
+    Label(Spanned<LabelE<S>, S>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Type<S> {
+pub enum TypeE<S> {
     Base(S),
-    Arr(Term<S>, Option<Box<Type<S>>>, Term<S>, S),
-    App(Box<Type<S>>, ArgsWithType<S>, S),
-    Susp(Box<Type<S>>, S),
+    Arr(TermE<S>, Option<Box<TypeE<S>>>, TermE<S>, S),
+    App(Box<TypeE<S>>, ArgsWithTypeE<S>, S),
+    Susp(Box<TypeE<S>>, S),
     Hole(S),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Ctx<S> {
+pub enum CtxE<S> {
     Tree(Tree<NoDispOption<Name>>),
-    Other(Vec<(Name, Type<S>)>),
+    Other(Vec<(Name, TypeE<S>)>),
 }
 
-impl<S> Term<S> {
+impl<S> TermE<S> {
     pub(crate) fn span(&self) -> &S {
         match self {
-            Term::App(_, _, s)
-            | Term::Susp(_, s)
-            | Term::Var(_, s)
-            | Term::Coh(_, _, s)
-            | Term::Include(_, _, s)
-            | Term::UComp(s)
-            | Term::Hole(s)
-            | Term::Id(s) => s,
+            TermE::App(_, _, s)
+            | TermE::Susp(_, s)
+            | TermE::Var(_, s)
+            | TermE::Coh(_, _, s)
+            | TermE::Include(_, _, s)
+            | TermE::Comp(s)
+            | TermE::Hole(s)
+            | TermE::Id(s) => s,
         }
     }
 }
 
-impl<S> Type<S> {
+impl<S> TypeE<S> {
     pub(crate) fn span(&self) -> &S {
         match self {
-            Type::Base(s)
-            | Type::Arr(_, _, _, s)
-            | Type::App(_, _, s)
-            | Type::Susp(_, s)
-            | Type::Hole(s) => s,
+            TypeE::Base(s)
+            | TypeE::Arr(_, _, _, s)
+            | TypeE::App(_, _, s)
+            | TypeE::Susp(_, s)
+            | TypeE::Hole(s) => s,
         }
     }
 }
 
-impl<S> ToDoc for ArgsWithType<S> {
+impl<S> ToDoc for ArgsWithTypeE<S> {
     fn to_doc(&self) -> RcDoc<'_> {
         let ty_part = if let Some(ty) = &self.ty {
             RcDoc::line_()
@@ -94,20 +94,20 @@ impl<S> ToDoc for ArgsWithType<S> {
     }
 }
 
-impl<S> ToDoc for Term<S> {
+impl<S> ToDoc for TermE<S> {
     fn to_doc(&self) -> RcDoc<'_> {
         match self {
-            Term::App(t, a, _) => {
+            TermE::App(t, a, _) => {
                 RcDoc::group(t.to_doc().append(RcDoc::line_().append(a.to_doc()).nest(2)))
             }
-            Term::Susp(t, _) => RcDoc::group(
-                RcDoc::text("‼(")
+            TermE::Susp(t, _) => RcDoc::group(
+                RcDoc::text("Σ(")
                     .append(RcDoc::line_().append(t.to_doc()).nest(2))
                     .append(RcDoc::line_())
                     .append(")"),
             ),
-            Term::Var(t, _) => t.to_doc(),
-            Term::Coh(tr, ty, _) => RcDoc::group(
+            TermE::Var(t, _) => t.to_doc(),
+            TermE::Coh(tr, ty, _) => RcDoc::group(
                 RcDoc::text("coh [ ").append(tr.to_doc().nest(6)).append(
                     RcDoc::line()
                         .append(": ")
@@ -116,28 +116,28 @@ impl<S> ToDoc for Term<S> {
                         .nest(4),
                 ),
             ),
-            Term::Include(tm, rng, _) => RcDoc::group(
+            TermE::Include(tm, rng, _) => RcDoc::group(
                 RcDoc::text(format!("inc<{}-{}>(", rng.start(), rng.end()))
                     .append(RcDoc::line_().append(tm.to_doc()).nest(2))
                     .append(RcDoc::line_().append(")")),
             ),
-            Term::UComp(_) => RcDoc::group(RcDoc::text("ucomp")),
-            Term::Hole(_) => RcDoc::group(RcDoc::text("_")),
-            Term::Id(_) => RcDoc::text("id"),
+            TermE::Comp(_) => RcDoc::group(RcDoc::text("comp")),
+            TermE::Hole(_) => RcDoc::group(RcDoc::text("_")),
+            TermE::Id(_) => RcDoc::text("id"),
         }
     }
 }
 
-impl<S> Display for Term<S> {
+impl<S> Display for TermE<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.to_doc().render_fmt(usize::MAX, f)
     }
 }
 
-impl<S> ToDoc for Args<S> {
+impl<S> ToDoc for ArgsE<S> {
     fn to_doc(&self) -> RcDoc<'_> {
         match self {
-            Args::Sub(Spanned(args, _)) => RcDoc::group(
+            ArgsE::Sub(Spanned(args, _)) => RcDoc::group(
                 RcDoc::text("(")
                     .append(
                         RcDoc::intersperse(
@@ -148,7 +148,7 @@ impl<S> ToDoc for Args<S> {
                     )
                     .append(")"),
             ),
-            Args::Label(l) => {
+            ArgsE::Label(l) => {
                 if l.0.is_max_tree() {
                     l.0.to_doc_max()
                 } else {
@@ -159,17 +159,17 @@ impl<S> ToDoc for Args<S> {
     }
 }
 
-impl<S> Display for Args<S> {
+impl<S> Display for ArgsE<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.to_doc().render_fmt(usize::MAX, f)
     }
 }
 
-impl<S> ToDoc for Type<S> {
+impl<S> ToDoc for TypeE<S> {
     fn to_doc(&self) -> RcDoc<'_> {
         match self {
-            Type::Base(_) => RcDoc::text("*"),
-            Type::Arr(s, a, t, _) => {
+            TypeE::Base(_) => RcDoc::text("*"),
+            TypeE::Arr(s, a, t, _) => {
                 let start = if let Some(x) = a {
                     x.to_doc().append(RcDoc::line()).append("| ")
                 } else {
@@ -179,43 +179,43 @@ impl<S> ToDoc for Type<S> {
                 let end = RcDoc::group(
                     s.to_doc()
                         .append(RcDoc::line())
-                        .append("->")
+                        .append("→")
                         .append(RcDoc::line())
                         .append(t.to_doc()),
                 );
 
                 RcDoc::group(start.append(end))
             }
-            Type::App(t, a, _) => RcDoc::group(
+            TypeE::App(t, a, _) => RcDoc::group(
                 RcDoc::text("(")
                     .append(t.to_doc())
                     .append(")")
                     .append(RcDoc::line_().append(a.to_doc()).nest(2)),
             ),
-            Type::Susp(t, _) => RcDoc::group(
-                RcDoc::text("‼(")
+            TypeE::Susp(t, _) => RcDoc::group(
+                RcDoc::text("Σ(")
                     .append(RcDoc::line_().append(t.to_doc()).nest(2))
                     .append(RcDoc::line_())
                     .append(")"),
             ),
-            Type::Hole(_) => RcDoc::text("_"),
+            TypeE::Hole(_) => RcDoc::text("_"),
         }
     }
 }
 
-impl<S> Display for Type<S> {
+impl<S> Display for TypeE<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.to_doc().render_fmt(usize::MAX, f)
     }
 }
 
-impl<S> Display for Ctx<S> {
+impl<S> Display for CtxE<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Ctx::Tree(t) => {
+            CtxE::Tree(t) => {
                 t.fmt(f)?;
             }
-            Ctx::Other(xs) => {
+            CtxE::Other(xs) => {
                 for (name, ty) in xs {
                     write!(f, "({name} : {ty})")?;
                 }

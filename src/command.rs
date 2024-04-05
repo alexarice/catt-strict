@@ -15,7 +15,7 @@ use thiserror::Error;
 use crate::{
     common::{CtxT, Environment, InferRes, Name, ToDoc},
     parsing::{comment, ctx, ident, term, ty},
-    syntax::{Ctx, Term, Type},
+    syntax::{CtxE, TermE, TypeE},
     typecheck::TypeCheckError,
 };
 
@@ -48,7 +48,7 @@ where
     #[error("Other report")]
     Report(Vec<Report<'static, (Id, Range<usize>)>>),
     #[error("Assertion failed: Terms \"{}\" and \"{}\" are not equal", .0.fg(Color::Red), .1.fg(Color::Red))]
-    Assertion(Term<Range<usize>>, Term<Range<usize>>, Range<usize>),
+    Assertion(TermE<Range<usize>>, TermE<Range<usize>>, Range<usize>),
 }
 
 impl<Id: Debug + Hash + PartialEq + Eq + Clone> CattError<Id> {
@@ -91,17 +91,18 @@ impl<Id: Debug + Hash + PartialEq + Eq + Clone> CattError<Id> {
 }
 
 pub enum Command {
-    DefHead(Name, Term<Range<usize>>),
-    DefCtx(Name, Ctx<Range<usize>>, Term<Range<usize>>),
+    DefHead(Name, TermE<Range<usize>>),
+    DefCtx(Name, CtxE<Range<usize>>, TermE<Range<usize>>),
     DefWT(
         Name,
-        Ctx<Range<usize>>,
-        Type<Range<usize>>,
-        Term<Range<usize>>,
+        CtxE<Range<usize>>,
+        TypeE<Range<usize>>,
+        TermE<Range<usize>>,
     ),
-    Normalise(Ctx<Range<usize>>, Term<Range<usize>>),
-    AssertEq(Ctx<Range<usize>>, Term<Range<usize>>, Term<Range<usize>>),
-    Size(Ctx<Range<usize>>, Term<Range<usize>>),
+
+    Normalise(CtxE<Range<usize>>, TermE<Range<usize>>),
+    AssertEq(CtxE<Range<usize>>, TermE<Range<usize>>, TermE<Range<usize>>),
+    Size(CtxE<Range<usize>>, TermE<Range<usize>>),
     Import(PathBuf, Range<usize>),
 }
 

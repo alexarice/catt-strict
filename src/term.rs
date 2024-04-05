@@ -5,7 +5,7 @@ use either::Either;
 
 use crate::{
     common::{Container, CtxT, Level, Name, NoDispOption, Path, Position, Spanned, Tree},
-    syntax::{Args, ArgsWithType, Term, Type},
+    syntax::{ArgsE, ArgsWithTypeE, TermE, TypeE},
 };
 
 #[derive(Clone, Debug, Derivative)]
@@ -18,8 +18,8 @@ pub enum TermT<T: Clone> {
     Susp(Box<TermT<T>>),
     Coh(Tree<NoDispOption<Name>>, Box<TypeT<Path>>),
     Include(Box<TermT<T>>, RangeInclusive<usize>),
-    UComp(Tree<NoDispOption<Name>>),
-    IdT(usize),
+    Comp(Tree<NoDispOption<Name>>),
+    Id(usize),
 }
 
 pub type ArgsT<S, T> = <S as Position>::Container<TermT<T>>;
@@ -45,46 +45,46 @@ pub enum TypeT<T: Clone> {
 }
 
 impl<T: Position> TermT<T> {
-    pub(crate) fn to_expr(&self, ctx: Option<&T::Ctx>, with_ict: bool) -> Term<()> {
+    pub(crate) fn to_expr(&self, ctx: Option<&T::Ctx>, with_ict: bool) -> TermE<()> {
         match self {
-            TermT::AppLvl(tm, args) => Term::App(
+            TermT::AppLvl(tm, args) => TermE::App(
                 Box::new(tm.to_expr(None, with_ict)),
                 args.to_expr(ctx, with_ict),
                 (),
             ),
-            TermT::AppPath(tm, args) => Term::App(
+            TermT::AppPath(tm, args) => TermE::App(
                 Box::new(tm.to_expr(None, with_ict)),
                 args.to_expr(ctx, with_ict),
                 (),
             ),
-            TermT::Var(x) => Term::Var(
+            TermT::Var(x) => TermE::Var(
                 ctx.and_then(|c| c.get_name(x)).unwrap_or(Name(x.to_name())),
                 (),
             ),
-            TermT::TopLvl(nm, _) => Term::Var(nm.clone(), ()),
-            TermT::Susp(t) => Term::Susp(Box::new(t.to_expr(None, with_ict)), ()),
-            TermT::Coh(tr, ty) => Term::Coh(
+            TermT::TopLvl(nm, _) => TermE::Var(nm.clone(), ()),
+            TermT::Susp(t) => TermE::Susp(Box::new(t.to_expr(None, with_ict)), ()),
+            TermT::Coh(tr, ty) => TermE::Coh(
                 tr.clone(),
                 Box::new(ty.to_expr(Some(&tr.clone()), with_ict)),
                 (),
             ),
             TermT::Include(tm, rng) => {
-                Term::Include(Box::new(tm.to_expr(ctx, with_ict)), rng.clone(), ())
+                TermE::Include(Box::new(tm.to_expr(ctx, with_ict)), rng.clone(), ())
             }
-            TermT::UComp(_) => Term::UComp(()),
-            TermT::IdT(_) => Term::Id(()),
+            TermT::Comp(_) => TermE::Comp(()),
+            TermT::Id(_) => TermE::Id(()),
         }
     }
 }
 
 impl<S: Position, T: Position> ArgsWithTypeT<S, T> {
-    pub(crate) fn to_expr(&self, ctx: Option<&T::Ctx>, with_ict: bool) -> ArgsWithType<()> {
+    pub(crate) fn to_expr(&self, ctx: Option<&T::Ctx>, with_ict: bool) -> ArgsWithTypeE<()> {
         let args = match self.args.to_tree_or_vec() {
-            Either::Right(s) => Args::Sub(Spanned(
+            Either::Right(s) => ArgsE::Sub(Spanned(
                 s.iter().map(|tm| tm.to_expr(ctx, with_ict)).collect(),
                 (),
             )),
-            Either::Left(l) => Args::Label(Spanned(
+            Either::Left(l) => ArgsE::Label(Spanned(
                 if !with_ict {
                     l.label_from_max(
                         &mut l
@@ -100,7 +100,7 @@ impl<S: Position, T: Position> ArgsWithTypeT<S, T> {
             )),
         };
 
-        ArgsWithType {
+        ArgsWithTypeE {
             args,
             ty: with_ict.then_some(Box::new(self.ty.to_expr(ctx, with_ict))),
         }
@@ -108,26 +108,26 @@ impl<S: Position, T: Position> ArgsWithTypeT<S, T> {
 }
 
 impl<T: Position> TypeT<T> {
-    pub(crate) fn to_expr(&self, ctx: Option<&T::Ctx>, with_ict: bool) -> Type<()> {
+    pub(crate) fn to_expr(&self, ctx: Option<&T::Ctx>, with_ict: bool) -> TypeE<()> {
         match self {
-            TypeT::Base => Type::Base(()),
-            TypeT::Arr(s, a, t) => Type::Arr(
+            TypeT::Base => TypeE::Base(()),
+            TypeT::Arr(s, a, t) => TypeE::Arr(
                 s.to_expr(ctx, with_ict),
                 with_ict.then_some(Box::new(a.to_expr(ctx, with_ict))),
                 t.to_expr(ctx, with_ict),
                 (),
             ),
-            TypeT::AppLvl(ty, args) => Type::App(
+            TypeT::AppLvl(ty, args) => TypeE::App(
                 Box::new(ty.to_expr(None, with_ict)),
                 args.to_expr(ctx, with_ict),
                 (),
             ),
-            TypeT::AppPath(ty, args) => Type::App(
+            TypeT::AppPath(ty, args) => TypeE::App(
                 Box::new(ty.to_expr(None, with_ict)),
                 args.to_expr(ctx, with_ict),
                 (),
             ),
-            TypeT::Susp(ty) => Type::Susp(Box::new(ty.to_expr(ctx, with_ict)), ()),
+            TypeT::Susp(ty) => TypeE::Susp(Box::new(ty.to_expr(ctx, with_ict)), ()),
         }
     }
 }

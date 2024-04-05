@@ -8,7 +8,7 @@ use pretty::RcDoc;
 use crate::{
     eval::SemCtx,
     normal::TermN,
-    syntax::Term,
+    syntax::TermE,
     term::{ArgsT, TermT, TypeT},
     typecheck::TypeCheckError,
 };
@@ -339,7 +339,7 @@ pub trait CtxT<P: Position> {
 
     fn check_in_tree<F, S>(
         &self,
-        term: &Term<S>,
+        term: &TermE<S>,
         func: F,
     ) -> Result<(TermT<P>, TypeT<P>), TypeCheckError<S>>
     where
@@ -398,7 +398,7 @@ impl CtxT<Level> for Vec<(Option<Name>, TypeT<Level>)> {
 
     fn check_in_tree<F, S>(
         &self,
-        term: &Term<S>,
+        term: &TermE<S>,
         _: F,
     ) -> Result<(TermT<Level>, TypeT<Level>), TypeCheckError<S>>
     where
@@ -442,7 +442,7 @@ impl CtxT<Path> for Tree<NoDispOption<Name>> {
 
     fn check_in_tree<F, S>(
         &self,
-        _: &Term<S>,
+        _: &TermE<S>,
         func: F,
     ) -> Result<(TermT<Path>, TypeT<Path>), TypeCheckError<S>>
     where
