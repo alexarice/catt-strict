@@ -7,3 +7,7 @@ normalise [[a],[b]] | endo_coh(a,b)
 def test [[[c]],[a],[b]] = comp [[[c]],[[endo_coh(a,b)]]]
 
 normalise [[[c]],[a],[b]] | test(c,a,b)
+
+def test2 {x{f}y} = p0 [f]
+
+normalise (x : *) (f : x -> x) | test2(f)

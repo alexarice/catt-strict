@@ -353,7 +353,7 @@ pub trait Position: Clone + PartialEq + Eq {
     type Container<T: Clone>: Container<Self, T> + Clone;
     type Ctx: CtxT<Self> + Clone;
 
-    fn to_name(&self) -> String;
+    fn to_name(&self) -> Name;
 }
 
 pub trait Eval: Position {
@@ -416,8 +416,8 @@ impl Position for Level {
 
     type Ctx = Vec<(Option<Name>, TypeT<Level>)>;
 
-    fn to_name(&self) -> String {
-        format!("l{}", self)
+    fn to_name(&self) -> Name {
+        Name(format!("l{}", self))
     }
 }
 
@@ -474,8 +474,8 @@ impl Position for Path {
 
     type Ctx = Tree<NoDispOption<Name>>;
 
-    fn to_name(&self) -> String {
-        format!("p{}", self)
+    fn to_name(&self) -> Name {
+        Name(format!("p{}", self))
     }
 }
 

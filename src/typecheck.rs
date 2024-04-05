@@ -419,7 +419,7 @@ impl<S: Clone + Debug> TermE<S> {
                 }
                 ArgsE::Label(Spanned(l, sp)) => {
                     let (tmt, tyt) =
-                        head.check(env, &l.map_ref(&|_| NoDispOption(None)).to_map())?;
+                        head.check(env, &l.path_tree().map(&|p| NoDispOption(Some(p.to_name()))).to_map())?;
                     let (lt, tyn) = l.infer(env, local, sp)?;
 
                     let awt = ArgsWithTypeT {

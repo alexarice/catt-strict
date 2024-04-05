@@ -58,7 +58,7 @@ impl<T: Position> TermT<T> {
                 (),
             ),
             TermT::Var(x) => TermE::Var(
-                ctx.and_then(|c| c.get_name(x)).unwrap_or(Name(x.to_name())),
+                ctx.and_then(|c| c.get_name(x)).unwrap_or(x.to_name()),
                 (),
             ),
             TermT::TopLvl(nm, _) => TermE::Var(nm.clone(), ()),
