@@ -130,16 +130,16 @@ impl<T: Position> TypeT<T> {
 }
 
 impl Tree<NoDispOption<Name>> {
-    pub(crate) fn unbiased_comp(self, d: usize) -> TermT<Path> {
-        let ty = self.unbiased_type(d);
+    pub(crate) fn standard_comp(self, d: usize) -> TermT<Path> {
+        let ty = self.standard_type(d);
         TermT::Coh(self, Box::new(ty))
     }
-    pub(crate) fn unbiased_term(self, d: usize) -> TermT<Path> {
+    pub(crate) fn standard_term(self, d: usize) -> TermT<Path> {
         if d == 0 {
             if self.branches.is_empty() {
                 TermT::Var(Path::here(0))
             } else {
-                self.unbiased_comp(d)
+                self.standard_comp(d)
             }
         } else if self.branches.len() == 1 {
             TermT::Susp(Box::new(
@@ -147,14 +147,14 @@ impl Tree<NoDispOption<Name>> {
                     .into_iter()
                     .next()
                     .unwrap()
-                    .unbiased_term(d - 1),
+                    .standard_term(d - 1),
             ))
         } else {
-            self.unbiased_comp(d)
+            self.standard_comp(d)
         }
     }
 
-    pub(crate) fn unbiased_type(&self, d: usize) -> TypeT<Path> {
+    pub(crate) fn standard_type(&self, d: usize) -> TypeT<Path> {
         if d == 0 {
             TypeT::Base
         } else {
@@ -163,15 +163,15 @@ impl Tree<NoDispOption<Name>> {
             let tgt = self.bdry(d - 1, true);
             TypeT::Arr(
                 TermT::AppPath(
-                    Box::new(src.unbiased_term(d - 1)),
+                    Box::new(src.standard_term(d - 1)),
                     ArgsWithTypeT {
                         args: ptree.bdry(d - 1, false),
                         ty: Box::new(TypeT::Base),
                     },
                 ),
-                Box::new(self.unbiased_type(d - 1)),
+                Box::new(self.standard_type(d - 1)),
                 TermT::AppPath(
-                    Box::new(tgt.unbiased_term(d - 1)),
+                    Box::new(tgt.standard_term(d - 1)),
                     ArgsWithTypeT {
                         args: ptree.bdry(d - 1, true),
                         ty: Box::new(TypeT::Base),

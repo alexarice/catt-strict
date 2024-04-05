@@ -154,7 +154,7 @@ impl TypeN<Path> {
         }
     }
 
-    pub(crate) fn is_unbiased<T>(&self, tree: &Tree<T>) -> bool {
+    pub(crate) fn is_standard<T>(&self, tree: &Tree<T>) -> bool {
         let dim = tree.dim();
         if dim != self.dim() {
             return false;

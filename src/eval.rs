@@ -130,7 +130,7 @@ fn eval_coh<T: Clone>(
 
     let tyn = tyt.map_or_else(
         || {
-            tree.unbiased_type(final_dim)
+            tree.standard_type(final_dim)
                 .eval(&SemCtx::id_tree(&tree), env)
         },
         |x| x.eval(&SemCtx::id_tree(&tree), env),
@@ -154,7 +154,7 @@ fn eval_coh<T: Clone>(
         }
     }
 
-    if tyn.is_unbiased(&tree) {
+    if tyn.is_standard(&tree) {
         if env.reduction.disc_rem && tree.is_disc() {
             return args.unwrap_disc();
         }
@@ -315,9 +315,9 @@ impl<T: Position> TypeNRef<T> {
 }
 
 impl Tree<NoDispOption<Name>> {
-    fn unbiased(self, d: usize) -> Tree<TermT<Path>> {
-        let mut ty = self.unbiased_type(d);
-        let mut tr = Tree::singleton(self.unbiased_comp(d));
+    fn standard(self, d: usize) -> Tree<TermT<Path>> {
+        let mut ty = self.standard_type(d);
+        let mut tr = Tree::singleton(self.standard_comp(d));
         while let TypeT::Arr(s, a, t) = ty {
             tr = Tree {
                 elements: vec![s, t],
@@ -353,7 +353,7 @@ impl Tree<NoDispOption<Name>> {
                 let d = self.branches[bp.here].dim() + 1;
                 let inner_args = inner
                     .clone()
-                    .unbiased(d)
+                    .standard(d)
                     .map(&|tm| TermT::Include(Box::new(tm), bp.here..=bp.here + inner_size));
                 l.branches.splice(bp.here..bp.here + 1, inner_args.branches);
 

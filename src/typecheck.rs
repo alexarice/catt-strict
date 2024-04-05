@@ -333,12 +333,12 @@ impl<S: Clone + Debug> TermE<S> {
                 .map(|(p, ty)| (TermT::Var(p.clone()), ty.clone()))
                 .ok_or_else(|| TypeCheckError::UnknownLocal(x.clone(), sp.clone())),
             t @ TermE::Comp(_) => local.ctx.check_in_tree(t, |tr| {
-                Ok((TermT::Comp(tr.clone()), tr.unbiased_type(tr.dim())))
+                Ok((TermT::Comp(tr.clone()), tr.standard_type(tr.dim())))
             }),
             t @ TermE::Id(sp) => local.ctx.check_in_tree(t, |tr| {
                 if tr.is_disc() {
                     let d = tr.dim();
-                    Ok((TermT::Id(d), tr.unbiased_type(d + 1)))
+                    Ok((TermT::Id(d), tr.standard_type(d + 1)))
                 } else {
                     Err(TypeCheckError::IdNotDisc(sp.clone(), tr.clone()))
                 }
