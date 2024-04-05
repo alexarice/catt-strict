@@ -135,10 +135,10 @@ pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
                     .then(just("=").ignore_then(term().padded_by(comment()))),
             )
             .map(|(ctx, (tm1, tm2))| Command::AssertEq(ctx, tm1, tm2)))
-	.or(just("size ")
-	    .ignore_then(ctx().padded_by(comment()))
-	    .then(just("|").ignore_then(term().padded_by(comment())))
-	    .map(|(ctx,tm)| Command::Size(ctx,tm)))
+        .or(just("size ")
+            .ignore_then(ctx().padded_by(comment()))
+            .then(just("|").ignore_then(term().padded_by(comment())))
+            .map(|(ctx, tm)| Command::Size(ctx, tm)))
         .or(just("import ").ignore_then(
             text::whitespace()
                 .at_least(1)
@@ -307,8 +307,8 @@ impl Command {
                     }
                 }
             }
-	    Command::Size(ctx, tm) => {
-		println!("{} {tm}", "Normalising".fg(Color::Green));
+            Command::Size(ctx, tm) => {
+                println!("{} {tm}", "Normalising".fg(Color::Green));
                 let local = ctx.check(env)?;
                 macro_rules! get_size {
                     ($l:expr) => {
@@ -319,17 +319,13 @@ impl Command {
                             "{}",
                             RcDoc::group(
                                 RcDoc::text("Term:".fg(Color::Blue).to_string())
-                                    .append(
-                                        RcDoc::line()
-                                            .append(
-                                                tm.to_doc()
-                                            )
-                                            .nest(2)
-                                    )
+                                    .append(RcDoc::line().append(tm.to_doc()).nest(2))
                                     .append(RcDoc::line())
-                                    .append(RcDoc::group(
-                                        RcDoc::text(format!("{} {}", "has size:".fg(Color::Blue), tmn.size()))
-                                    ))
+                                    .append(RcDoc::group(RcDoc::text(format!(
+                                        "{} {}",
+                                        "has size:".fg(Color::Blue),
+                                        tmn.size()
+                                    ))))
                             )
                             .pretty(80)
                         );
@@ -343,7 +339,7 @@ impl Command {
                         get_size!(local);
                     }
                 }
-	    }
+            }
             Command::AssertEq(ctx, tm1, tm2) => {
                 println!(
                     "{} {tm1} {} {tm2}",
@@ -403,13 +399,13 @@ impl Command {
                 }
             }
             Command::Import(filename, sp) => {
-		let import_file = if let Some(f) = file.and_then(|x| x.parent()) {
-		    let mut x = f.to_path_buf();
-		    x.extend(filename.iter());
-		    x
-		} else {
-		    filename
-		};
+                let import_file = if let Some(f) = file.and_then(|x| x.parent()) {
+                    let mut x = f.to_path_buf();
+                    x.extend(filename.iter());
+                    x
+                } else {
+                    filename
+                };
                 println!("{} {}", "Importing".fg(Color::Green), import_file.display());
                 let src = std::fs::read_to_string(&import_file)
                     .map_err(|_| CattError::FileError(import_file.clone(), sp))?;

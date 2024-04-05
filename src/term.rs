@@ -57,10 +57,7 @@ impl<T: Position> TermT<T> {
                 args.to_expr(ctx, with_ict),
                 (),
             ),
-            TermT::Var(x) => TermE::Var(
-                ctx.and_then(|c| c.get_name(x)).unwrap_or(x.to_name()),
-                (),
-            ),
+            TermT::Var(x) => TermE::Var(ctx.and_then(|c| c.get_name(x)).unwrap_or(x.to_name()), ()),
             TermT::TopLvl(nm, _) => TermE::Var(nm.clone(), ()),
             TermT::Susp(t) => TermE::Susp(Box::new(t.to_expr(None, with_ict)), ()),
             TermT::Coh(tr, ty) => TermE::Coh(

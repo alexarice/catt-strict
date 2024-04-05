@@ -63,7 +63,13 @@ impl<T> TermN<T> {
     pub(crate) fn size(&self) -> usize {
         match self {
             TermN::Variable(_) => 0,
-            TermN::Other(h, tr) => h.size() + tr.get_paths().into_iter().map(|(_, tm)| tm.size()).sum::<usize>(),
+            TermN::Other(h, tr) => {
+                h.size()
+                    + tr.get_paths()
+                        .into_iter()
+                        .map(|(_, tm)| tm.size())
+                        .sum::<usize>()
+            }
         }
     }
 }
@@ -93,7 +99,7 @@ impl<T> TypeN<T> {
     }
 
     pub(crate) fn size(&self) -> usize {
-	self.0.iter().map(|(s,t)| s.size() + t.size()).sum()
+        self.0.iter().map(|(s, t)| s.size() + t.size()).sum()
     }
 }
 

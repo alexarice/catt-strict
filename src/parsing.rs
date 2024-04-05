@@ -98,7 +98,8 @@ where
         .or(text::keyword("id").map_with_span(|_, s| TermE::Id(s)))
         .or(just("_").map_with_span(|_, sp| TermE::Hole(sp)))
         .or(ident().map_with_span(TermE::Var))
-        .or(just("S").or(just("Σ"))
+        .or(just("S")
+            .or(just("Σ"))
             .ignore_then(term.padded_by(comment()).delimited_by(just("("), just(")")))
             .map_with_span(|t, sp| TermE::Susp(Box::new(t), sp)))
 }
@@ -138,9 +139,12 @@ fn ty_internal<P>(term: P) -> impl Parser<char, TypeE<Range<usize>>, Error = Sim
 where
     P: Parser<char, TermE<Range<usize>>, Error = Simple<char>> + Clone,
 {
-    let arr = term
-        .clone()
-        .then(just("->").or(just("→")).padded_by(comment()).ignore_then(term.clone()));
+    let arr = term.clone().then(
+        just("->")
+            .or(just("→"))
+            .padded_by(comment())
+            .ignore_then(term.clone()),
+    );
 
     just("*")
         .map_with_span(|_, sp| TypeE::Base(sp))
@@ -150,9 +154,11 @@ where
             just("|")
                 .padded_by(comment())
                 .ignore_then(
-                    term.clone()
-                        .padded_by(comment())
-                        .then(just("->").or(just("→")).ignore_then(term.padded_by(comment()))),
+                    term.clone().padded_by(comment()).then(
+                        just("->")
+                            .or(just("→"))
+                            .ignore_then(term.padded_by(comment())),
+                    ),
                 )
                 .map_with_span(|x, sp| (x, sp))
                 .repeated(),
