@@ -109,7 +109,7 @@ impl TypeN<Path> {
 
     pub(crate) fn support_check<T>(mut self, tree: &Tree<T>, support: &Support) -> bool {
         match support {
-            Support::FullInverse => {
+            Support::NoInverse => {
                 if let Some((s, t)) = self.0.pop() {
                     let mut src = self.free_vars();
                     let dim = tree.dim();
@@ -144,7 +144,7 @@ impl TypeN<Path> {
                     false
                 }
             }
-            Support::NoInverse => true,
+            Support::FullInverse => true,
         }
     }
 
