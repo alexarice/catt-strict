@@ -7,9 +7,9 @@ use pretty::RcDoc;
 
 use crate::{
     eval::SemCtx,
-    normal::TermN,
-    syntax::TermE,
-    term::{ArgsT, TermT, TypeT},
+    syntax::normal::TermN,
+    syntax::raw::TermR,
+    syntax::core::{ArgsC, TermC, TypeC},
     typecheck::TypeCheckError,
 };
 
@@ -330,7 +330,7 @@ pub trait Container<P, T> {
     fn to_tree_or_vec(&self) -> Either<&Tree<T>, &Vec<T>>;
 }
 
-pub trait CtxT<P: Position> {
+pub trait Ctx<P: Position> {
     fn susp_ctx(self) -> Self;
 
     fn get_name(&self, pos: &P) -> Option<Name>;
@@ -339,29 +339,29 @@ pub trait CtxT<P: Position> {
 
     fn check_in_tree<F, S>(
         &self,
-        term: &TermE<S>,
+        term: &TermR<S>,
         func: F,
-    ) -> Result<(TermT<P>, TypeT<P>), TypeCheckError<S>>
+    ) -> Result<(TermC<P>, TypeC<P>), TypeCheckError<S>>
     where
         F: FnOnce(
             &Tree<NoDispOption<Name>>,
-        ) -> Result<(TermT<Path>, TypeT<Path>), TypeCheckError<S>>,
+        ) -> Result<(TermC<Path>, TypeC<Path>), TypeCheckError<S>>,
         S: Clone;
 }
 
 pub trait Position: Clone + PartialEq + Eq {
     type Container<T: Clone>: Container<Self, T> + Clone;
-    type Ctx: CtxT<Self> + Clone;
+    type Ctx: Ctx<Self> + Clone;
 
     fn to_name(&self) -> Name;
 }
 
 pub trait Eval: Position {
-    fn eval<T: Clone>(tm: &TermT<Self>, ctx: &SemCtx<Self, T>, env: &Environment) -> TermN<T>;
+    fn eval<T: Clone>(tm: &TermC<Self>, ctx: &SemCtx<Self, T>, env: &Environment) -> TermN<T>;
 
     fn eval_args<T: Eval, U: Clone>(
-        args: &ArgsT<Self, T>,
-        ty: &TypeT<T>,
+        args: &ArgsC<Self, T>,
+        ty: &TypeC<T>,
         ctx: &SemCtx<T, U>,
         env: &Environment,
     ) -> SemCtx<Self, U>;
@@ -381,9 +381,9 @@ impl<T> Container<Level, T> for Vec<T> {
     }
 }
 
-impl CtxT<Level> for Vec<(Option<Name>, TypeT<Level>)> {
+impl Ctx<Level> for Vec<(Option<Name>, TypeC<Level>)> {
     fn susp_ctx(self) -> Self {
-        let mut new_ctx = vec![(None, TypeT::Base), (None, TypeT::Base)];
+        let mut new_ctx = vec![(None, TypeC::Base), (None, TypeC::Base)];
         new_ctx.extend(self);
         new_ctx
     }
@@ -398,13 +398,13 @@ impl CtxT<Level> for Vec<(Option<Name>, TypeT<Level>)> {
 
     fn check_in_tree<F, S>(
         &self,
-        term: &TermE<S>,
+        term: &TermR<S>,
         _: F,
-    ) -> Result<(TermT<Level>, TypeT<Level>), TypeCheckError<S>>
+    ) -> Result<(TermC<Level>, TypeC<Level>), TypeCheckError<S>>
     where
         F: FnOnce(
             &Tree<NoDispOption<Name>>,
-        ) -> Result<(TermT<Path>, TypeT<Path>), TypeCheckError<S>>,
+        ) -> Result<(TermC<Path>, TypeC<Path>), TypeCheckError<S>>,
         S: Clone,
     {
         Err(TypeCheckError::CannotCheckCtx(term.clone()))
@@ -414,7 +414,7 @@ impl CtxT<Level> for Vec<(Option<Name>, TypeT<Level>)> {
 impl Position for Level {
     type Container<T: Clone> = Vec<T>;
 
-    type Ctx = Vec<(Option<Name>, TypeT<Level>)>;
+    type Ctx = Vec<(Option<Name>, TypeC<Level>)>;
 
     fn to_name(&self) -> Name {
         Name(format!("l{}", self))
@@ -427,7 +427,7 @@ pub struct Path {
     pub(crate) path: Vec<usize>,
 }
 
-impl CtxT<Path> for Tree<NoDispOption<Name>> {
+impl Ctx<Path> for Tree<NoDispOption<Name>> {
     fn susp_ctx(self) -> Self {
         self.susp()
     }
@@ -442,13 +442,13 @@ impl CtxT<Path> for Tree<NoDispOption<Name>> {
 
     fn check_in_tree<F, S>(
         &self,
-        _: &TermE<S>,
+        _: &TermR<S>,
         func: F,
-    ) -> Result<(TermT<Path>, TypeT<Path>), TypeCheckError<S>>
+    ) -> Result<(TermC<Path>, TypeC<Path>), TypeCheckError<S>>
     where
         F: FnOnce(
             &Tree<NoDispOption<Name>>,
-        ) -> Result<(TermT<Path>, TypeT<Path>), TypeCheckError<S>>,
+        ) -> Result<(TermC<Path>, TypeC<Path>), TypeCheckError<S>>,
         S: Clone,
     {
         func(self)
@@ -501,8 +501,8 @@ impl Path {
         self
     }
 
-    pub(crate) fn to_type(&self) -> TypeT<Path> {
-        let mut ty = TypeT::Base;
+    pub(crate) fn to_type(&self) -> TypeC<Path> {
+        let mut ty = TypeC::Base;
         let mut current_path = vec![];
 
         for x in self.path.iter().rev() {
@@ -518,7 +518,7 @@ impl Path {
 
             current_path.insert(0, *x);
 
-            ty = TypeT::Arr(TermT::Var(fst), Box::new(ty), TermT::Var(snd))
+            ty = TypeC::Arr(TermC::Var(fst), Box::new(ty), TermC::Var(snd))
         }
         ty
     }
@@ -548,16 +548,16 @@ pub enum Support {
 #[derive(Clone)]
 pub struct InferRes<T: Position> {
     pub(crate) ctx: <T as Position>::Ctx,
-    pub(crate) tm: TermT<T>,
-    pub(crate) ty: TypeT<T>,
+    pub(crate) tm: TermC<T>,
+    pub(crate) ty: TypeC<T>,
 }
 
 impl<T: Position> InferRes<T> {
     pub(crate) fn susp(self) -> Self {
         InferRes {
             ctx: self.ctx.susp_ctx(),
-            tm: TermT::Susp(Box::new(self.tm)),
-            ty: TypeT::Susp(Box::new(self.ty)),
+            tm: TermC::Susp(Box::new(self.tm)),
+            ty: TypeC::Susp(Box::new(self.ty)),
         }
     }
 }

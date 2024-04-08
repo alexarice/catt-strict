@@ -6,8 +6,8 @@ use crate::{
     common::{
         Container, Environment, Eval, Insertion, Level, Name, NoDispOption, Path, Position, Tree,
     },
-    normal::{HeadN, TermN, TypeN, TypeNRef},
-    term::{ArgsT, ArgsWithTypeT, TermT, TypeT},
+    syntax::normal::{HeadN, TermN, TypeN, TypeNRef},
+    syntax::core::{ArgsC, ArgsWithTypeC, TermC, TypeC},
 };
 
 #[derive(Clone, Debug)]
@@ -97,7 +97,7 @@ impl<T> Tree<TermN<T>> {
 
 fn eval_coh<T: Clone>(
     mut tree: Tree<NoDispOption<Name>>,
-    mut tyt: Option<TypeT<Path>>,
+    mut tyt: Option<TypeC<Path>>,
     ctx: &SemCtx<Path, T>,
     env: &Environment,
 ) -> TermN<T> {
@@ -107,18 +107,18 @@ fn eval_coh<T: Clone>(
 
     for _ in 0..dim {
         tree = tree.susp();
-        tyt = tyt.map(|x| TypeT::Susp(Box::new(x)))
+        tyt = tyt.map(|x| TypeC::Susp(Box::new(x)))
     }
 
     if let Some(insertion) = &env.reduction.insertion {
         while let Some((p, tr, args_inner)) = args.find_insertion_redex(insertion) {
             tyt = tyt.map(|x| {
                 let l = tree.exterior_sub(p.clone(), &tr);
-                TypeT::AppPath(
+                TypeC::AppPath(
                     Box::new(x),
-                    ArgsWithTypeT {
+                    ArgsWithTypeC {
                         args: l,
-                        ty: Box::new(TypeT::Base),
+                        ty: Box::new(TypeC::Base),
                     },
                 )
             });
@@ -137,7 +137,7 @@ fn eval_coh<T: Clone>(
     );
 
     if env.reduction.endo_coh && tyn.0.last().is_some_and(|(s, t)| s == t) {
-        if let TypeT::Arr(s, a, _) = tyn.quote() {
+        if let TypeC::Arr(s, a, _) = tyn.quote() {
             let sem_ctx = SemCtx::new(args, TypeN::base());
 
             let args = s.eval(&sem_ctx, env).into_args(a.eval(&sem_ctx, env));
@@ -165,23 +165,23 @@ fn eval_coh<T: Clone>(
 }
 
 impl Eval for Path {
-    fn eval<T: Clone>(tm: &TermT<Self>, ctx: &SemCtx<Self, T>, env: &Environment) -> TermN<T> {
+    fn eval<T: Clone>(tm: &TermC<Self>, ctx: &SemCtx<Self, T>, env: &Environment) -> TermN<T> {
         match tm {
-            TermT::AppLvl(t, awt) => {
+            TermC::AppLvl(t, awt) => {
                 let sem_ctx = awt.eval(ctx, env);
                 t.eval(&sem_ctx, env)
             }
-            TermT::AppPath(t, awt) => {
+            TermC::AppPath(t, awt) => {
                 let sem_ctx = awt.eval(ctx, env);
                 t.eval(&sem_ctx, env)
             }
-            TermT::Var(pos) => ctx.get(pos).clone(),
-            TermT::TopLvl(_, tmt) => tmt.eval(ctx, env),
-            TermT::Susp(t) => t.eval(&ctx.clone().restrict(), env),
-            TermT::Include(t, rng) => t.eval(&ctx.clone().include(rng), env),
-            TermT::Comp(tr) => eval_coh(tr.clone(), None, ctx, env),
-            TermT::Coh(tr, ty) => eval_coh(tr.clone(), Some(*ty.clone()), ctx, env),
-            TermT::Id(dim) => {
+            TermC::Var(pos) => ctx.get(pos).clone(),
+            TermC::TopLvl(_, tmt) => tmt.eval(ctx, env),
+            TermC::Susp(t) => t.eval(&ctx.clone().restrict(), env),
+            TermC::Include(t, rng) => t.eval(&ctx.clone().include(rng), env),
+            TermC::Comp(tr) => eval_coh(tr.clone(), None, ctx, env),
+            TermC::Coh(tr, ty) => eval_coh(tr.clone(), Some(*ty.clone()), ctx, env),
+            TermC::Id(dim) => {
                 let (args, res_dim) = ctx.clone().into_args();
                 TermN::Other(HeadN::IdN { dim: res_dim + dim }, args)
             }
@@ -189,8 +189,8 @@ impl Eval for Path {
     }
 
     fn eval_args<T: Eval, U: Clone>(
-        args: &ArgsT<Self, T>,
-        ty: &TypeT<T>,
+        args: &ArgsC<Self, T>,
+        ty: &TypeC<T>,
         ctx: &SemCtx<T, U>,
         env: &Environment,
     ) -> SemCtx<Self, U> {
@@ -212,26 +212,26 @@ impl Eval for Path {
 }
 
 impl Eval for Level {
-    fn eval<T: Clone>(tm: &TermT<Self>, ctx: &SemCtx<Self, T>, env: &Environment) -> TermN<T> {
+    fn eval<T: Clone>(tm: &TermC<Self>, ctx: &SemCtx<Self, T>, env: &Environment) -> TermN<T> {
         match tm {
-            TermT::AppLvl(t, awt) => {
+            TermC::AppLvl(t, awt) => {
                 let sem_ctx = awt.eval(ctx, env);
                 t.eval(&sem_ctx, env)
             }
-            TermT::AppPath(t, awt) => {
+            TermC::AppPath(t, awt) => {
                 let sem_ctx = awt.eval(ctx, env);
                 t.eval(&sem_ctx, env)
             }
-            TermT::Var(pos) => ctx.get(pos).clone(),
-            TermT::TopLvl(_, tmt) => tmt.eval(ctx, env),
-            TermT::Susp(t) => t.eval(&ctx.clone().restrict(), env),
+            TermC::Var(pos) => ctx.get(pos).clone(),
+            TermC::TopLvl(_, tmt) => tmt.eval(ctx, env),
+            TermC::Susp(t) => t.eval(&ctx.clone().restrict(), env),
             _ => unreachable!(),
         }
     }
 
     fn eval_args<T: Eval, U: Clone>(
-        args: &ArgsT<Self, T>,
-        ty: &TypeT<T>,
+        args: &ArgsC<Self, T>,
+        ty: &TypeC<T>,
         ctx: &SemCtx<T, U>,
         env: &Environment,
     ) -> SemCtx<Self, U> {
@@ -246,24 +246,24 @@ impl Eval for Level {
     }
 }
 
-impl<S: Eval> TermT<S> {
+impl<S: Eval> TermC<S> {
     pub(crate) fn eval<T: Clone>(&self, ctx: &SemCtx<S, T>, env: &Environment) -> TermN<T> {
         S::eval(self, ctx, env)
     }
 }
 
-impl<S: Eval> TypeT<S> {
+impl<S: Eval> TypeC<S> {
     pub(crate) fn eval<T: Clone>(&self, ctx: &SemCtx<S, T>, env: &Environment) -> TypeN<T> {
         match &self {
-            TypeT::Base => ctx.get_ty().clone(),
-            TypeT::Arr(s, a, t) => {
+            TypeC::Base => ctx.get_ty().clone(),
+            TypeC::Arr(s, a, t) => {
                 let mut an = a.eval(ctx, env);
                 an.0.push((s.eval(ctx, env), t.eval(ctx, env)));
                 an
             }
-            TypeT::AppLvl(ty, awt) => ty.eval(&awt.eval(ctx, env), env),
-            TypeT::AppPath(ty, awt) => ty.eval(&awt.eval(ctx, env), env),
-            TypeT::Susp(ty) => {
+            TypeC::AppLvl(ty, awt) => ty.eval(&awt.eval(ctx, env), env),
+            TypeC::AppPath(ty, awt) => ty.eval(&awt.eval(ctx, env), env),
+            TypeC::Susp(ty) => {
                 let new_ctx: SemCtx<S, T> = ctx.clone();
                 ty.eval(&new_ctx.restrict(), env)
             }
@@ -271,31 +271,31 @@ impl<S: Eval> TypeT<S> {
     }
 }
 
-impl<S: Eval, T: Eval> ArgsWithTypeT<S, T> {
+impl<S: Eval, T: Eval> ArgsWithTypeC<S, T> {
     pub(crate) fn eval<U: Clone>(&self, ctx: &SemCtx<T, U>, env: &Environment) -> SemCtx<S, U> {
         S::eval_args(&self.args, &self.ty, ctx, env)
     }
 }
 
 impl HeadN {
-    pub(crate) fn quote(&self) -> TermT<Path> {
+    pub(crate) fn quote(&self) -> TermC<Path> {
         match self {
-            HeadN::CohN { tree, ty } => TermT::Coh(tree.clone(), Box::new(ty.quote())),
-            HeadN::CompN { tree } => TermT::Comp(tree.clone()),
-            HeadN::IdN { dim } => TermT::Id(*dim),
+            HeadN::CohN { tree, ty } => TermC::Coh(tree.clone(), Box::new(ty.quote())),
+            HeadN::CompN { tree } => TermC::Comp(tree.clone()),
+            HeadN::IdN { dim } => TermC::Id(*dim),
         }
     }
 }
 
 impl<T: Position> TermN<T> {
-    pub(crate) fn quote(&self) -> TermT<T> {
+    pub(crate) fn quote(&self) -> TermC<T> {
         match self {
-            TermN::Variable(x) => TermT::Var(x.clone()),
-            TermN::Other(head, args) => TermT::AppPath(
+            TermN::Variable(x) => TermC::Var(x.clone()),
+            TermN::Other(head, args) => TermC::AppPath(
                 Box::new(head.quote()),
-                ArgsWithTypeT {
+                ArgsWithTypeC {
                     args: args.map_ref(&|tm| tm.quote()),
-                    ty: Box::new(TypeT::Base),
+                    ty: Box::new(TypeC::Base),
                 },
             ),
         }
@@ -303,11 +303,11 @@ impl<T: Position> TermN<T> {
 }
 
 impl<T: Position> TypeNRef<T> {
-    pub(crate) fn quote(&self) -> TypeT<T> {
-        let mut ret = TypeT::Base;
+    pub(crate) fn quote(&self) -> TypeC<T> {
+        let mut ret = TypeC::Base;
 
         for (s, t) in &self.0 {
-            ret = TypeT::Arr(s.quote(), Box::new(ret), t.quote())
+            ret = TypeC::Arr(s.quote(), Box::new(ret), t.quote())
         }
 
         ret
@@ -315,10 +315,10 @@ impl<T: Position> TypeNRef<T> {
 }
 
 impl Tree<NoDispOption<Name>> {
-    fn standard(self, d: usize) -> Tree<TermT<Path>> {
+    fn standard(self, d: usize) -> Tree<TermC<Path>> {
         let mut ty = self.standard_type(d);
         let mut tr = Tree::singleton(self.standard_comp(d));
-        while let TypeT::Arr(s, a, t) = ty {
+        while let TypeC::Arr(s, a, t) = ty {
             tr = Tree {
                 elements: vec![s, t],
                 branches: vec![tr],
@@ -328,14 +328,14 @@ impl Tree<NoDispOption<Name>> {
         tr
     }
 
-    fn exterior_sub(&self, mut bp: Path, inner: &Tree<NoDispOption<Name>>) -> Tree<TermT<Path>> {
+    fn exterior_sub(&self, mut bp: Path, inner: &Tree<NoDispOption<Name>>) -> Tree<TermC<Path>> {
         match bp.path.pop() {
             Some(i) => {
-                let mut l = self.path_tree().map(&TermT::Var);
+                let mut l = self.path_tree().map(&TermC::Var);
 
                 l.branches[i] = self.branches[i]
                     .exterior_sub(bp, &inner.branches[0])
-                    .map(&|tm| TermT::Include(Box::new(TermT::Susp(Box::new(tm))), i..=i + 1));
+                    .map(&|tm| TermC::Include(Box::new(TermC::Susp(Box::new(tm))), i..=i + 1));
 
                 l
             }
@@ -347,14 +347,14 @@ impl Tree<NoDispOption<Name>> {
                         *i += inner_size;
                         *i -= 1;
                     }
-                    TermT::Var(p)
+                    TermC::Var(p)
                 });
 
                 let d = self.branches[bp.here].dim() + 1;
                 let inner_args = inner
                     .clone()
                     .standard(d)
-                    .map(&|tm| TermT::Include(Box::new(tm), bp.here..=bp.here + inner_size));
+                    .map(&|tm| TermC::Include(Box::new(tm), bp.here..=bp.here + inner_size));
                 l.branches.splice(bp.here..bp.here + 1, inner_args.branches);
 
                 l

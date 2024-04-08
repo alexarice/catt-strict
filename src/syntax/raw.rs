@@ -6,75 +6,75 @@ use std::{
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ArgsWithTypeE<S> {
-    pub(crate) args: ArgsE<S>,
-    pub(crate) ty: Option<Box<TypeE<S>>>,
+pub struct ArgsWithTypeR<S> {
+    pub(crate) args: ArgsR<S>,
+    pub(crate) ty: Option<Box<TypeR<S>>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TermE<S> {
-    App(Box<TermE<S>>, ArgsWithTypeE<S>, S),
-    Susp(Box<TermE<S>>, S),
+pub enum TermR<S> {
+    App(Box<TermR<S>>, ArgsWithTypeR<S>, S),
+    Susp(Box<TermR<S>>, S),
     Var(Name, S),
-    Coh(Tree<NoDispOption<Name>>, Box<TypeE<S>>, S),
-    Include(Box<TermE<S>>, RangeInclusive<usize>, S),
+    Coh(Tree<NoDispOption<Name>>, Box<TypeR<S>>, S),
+    Include(Box<TermR<S>>, RangeInclusive<usize>, S),
     Comp(S),
     Id(S),
     Hole(S),
 }
 
-pub type SubE<S> = Vec<TermE<S>>;
-pub type LabelE<S> = Tree<NoDispOption<TermE<S>>>;
+pub type SubR<S> = Vec<TermR<S>>;
+pub type LabelR<S> = Tree<NoDispOption<TermR<S>>>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ArgsE<S> {
-    Sub(Spanned<SubE<S>, S>),
-    Label(Spanned<LabelE<S>, S>),
+pub enum ArgsR<S> {
+    Sub(Spanned<SubR<S>, S>),
+    Label(Spanned<LabelR<S>, S>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TypeE<S> {
+pub enum TypeR<S> {
     Base(S),
-    Arr(TermE<S>, Option<Box<TypeE<S>>>, TermE<S>, S),
-    App(Box<TypeE<S>>, ArgsWithTypeE<S>, S),
-    Susp(Box<TypeE<S>>, S),
+    Arr(TermR<S>, Option<Box<TypeR<S>>>, TermR<S>, S),
+    App(Box<TypeR<S>>, ArgsWithTypeR<S>, S),
+    Susp(Box<TypeR<S>>, S),
     Hole(S),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum CtxE<S> {
+pub enum CtxR<S> {
     Tree(Tree<NoDispOption<Name>>),
-    Other(Vec<(Name, TypeE<S>)>),
+    Other(Vec<(Name, TypeR<S>)>),
 }
 
-impl<S> TermE<S> {
+impl<S> TermR<S> {
     pub(crate) fn span(&self) -> &S {
         match self {
-            TermE::App(_, _, s)
-            | TermE::Susp(_, s)
-            | TermE::Var(_, s)
-            | TermE::Coh(_, _, s)
-            | TermE::Include(_, _, s)
-            | TermE::Comp(s)
-            | TermE::Hole(s)
-            | TermE::Id(s) => s,
+            TermR::App(_, _, s)
+            | TermR::Susp(_, s)
+            | TermR::Var(_, s)
+            | TermR::Coh(_, _, s)
+            | TermR::Include(_, _, s)
+            | TermR::Comp(s)
+            | TermR::Hole(s)
+            | TermR::Id(s) => s,
         }
     }
 }
 
-impl<S> TypeE<S> {
+impl<S> TypeR<S> {
     pub(crate) fn span(&self) -> &S {
         match self {
-            TypeE::Base(s)
-            | TypeE::Arr(_, _, _, s)
-            | TypeE::App(_, _, s)
-            | TypeE::Susp(_, s)
-            | TypeE::Hole(s) => s,
+            TypeR::Base(s)
+            | TypeR::Arr(_, _, _, s)
+            | TypeR::App(_, _, s)
+            | TypeR::Susp(_, s)
+            | TypeR::Hole(s) => s,
         }
     }
 }
 
-impl<S> ToDoc for ArgsWithTypeE<S> {
+impl<S> ToDoc for ArgsWithTypeR<S> {
     fn to_doc(&self) -> RcDoc<'_> {
         let ty_part = if let Some(ty) = &self.ty {
             RcDoc::line_()
@@ -94,20 +94,20 @@ impl<S> ToDoc for ArgsWithTypeE<S> {
     }
 }
 
-impl<S> ToDoc for TermE<S> {
+impl<S> ToDoc for TermR<S> {
     fn to_doc(&self) -> RcDoc<'_> {
         match self {
-            TermE::App(t, a, _) => {
+            TermR::App(t, a, _) => {
                 RcDoc::group(t.to_doc().append(RcDoc::line_().append(a.to_doc()).nest(2)))
             }
-            TermE::Susp(t, _) => RcDoc::group(
+            TermR::Susp(t, _) => RcDoc::group(
                 RcDoc::text("Σ(")
                     .append(RcDoc::line_().append(t.to_doc()).nest(2))
                     .append(RcDoc::line_())
                     .append(")"),
             ),
-            TermE::Var(t, _) => t.to_doc(),
-            TermE::Coh(tr, ty, _) => RcDoc::group(
+            TermR::Var(t, _) => t.to_doc(),
+            TermR::Coh(tr, ty, _) => RcDoc::group(
                 RcDoc::text("coh [ ").append(tr.to_doc().nest(6)).append(
                     RcDoc::line()
                         .append(": ")
@@ -116,28 +116,28 @@ impl<S> ToDoc for TermE<S> {
                         .nest(4),
                 ),
             ),
-            TermE::Include(tm, rng, _) => RcDoc::group(
+            TermR::Include(tm, rng, _) => RcDoc::group(
                 RcDoc::text(format!("inc<{}-{}>(", rng.start(), rng.end()))
                     .append(RcDoc::line_().append(tm.to_doc()).nest(2))
                     .append(RcDoc::line_().append(")")),
             ),
-            TermE::Comp(_) => RcDoc::group(RcDoc::text("comp")),
-            TermE::Hole(_) => RcDoc::group(RcDoc::text("_")),
-            TermE::Id(_) => RcDoc::text("id"),
+            TermR::Comp(_) => RcDoc::group(RcDoc::text("comp")),
+            TermR::Hole(_) => RcDoc::group(RcDoc::text("_")),
+            TermR::Id(_) => RcDoc::text("id"),
         }
     }
 }
 
-impl<S> Display for TermE<S> {
+impl<S> Display for TermR<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.to_doc().render_fmt(usize::MAX, f)
     }
 }
 
-impl<S> ToDoc for ArgsE<S> {
+impl<S> ToDoc for ArgsR<S> {
     fn to_doc(&self) -> RcDoc<'_> {
         match self {
-            ArgsE::Sub(Spanned(args, _)) => RcDoc::group(
+            ArgsR::Sub(Spanned(args, _)) => RcDoc::group(
                 RcDoc::text("(")
                     .append(
                         RcDoc::intersperse(
@@ -148,7 +148,7 @@ impl<S> ToDoc for ArgsE<S> {
                     )
                     .append(")"),
             ),
-            ArgsE::Label(l) => {
+            ArgsR::Label(l) => {
                 if l.0.is_max_tree() {
                     l.0.to_doc_max()
                 } else {
@@ -159,17 +159,17 @@ impl<S> ToDoc for ArgsE<S> {
     }
 }
 
-impl<S> Display for ArgsE<S> {
+impl<S> Display for ArgsR<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.to_doc().render_fmt(usize::MAX, f)
     }
 }
 
-impl<S> ToDoc for TypeE<S> {
+impl<S> ToDoc for TypeR<S> {
     fn to_doc(&self) -> RcDoc<'_> {
         match self {
-            TypeE::Base(_) => RcDoc::text("*"),
-            TypeE::Arr(s, a, t, _) => {
+            TypeR::Base(_) => RcDoc::text("*"),
+            TypeR::Arr(s, a, t, _) => {
                 let start = if let Some(x) = a {
                     x.to_doc().append(RcDoc::line()).append("| ")
                 } else {
@@ -186,36 +186,36 @@ impl<S> ToDoc for TypeE<S> {
 
                 RcDoc::group(start.append(end))
             }
-            TypeE::App(t, a, _) => RcDoc::group(
+            TypeR::App(t, a, _) => RcDoc::group(
                 RcDoc::text("(")
                     .append(t.to_doc())
                     .append(")")
                     .append(RcDoc::line_().append(a.to_doc()).nest(2)),
             ),
-            TypeE::Susp(t, _) => RcDoc::group(
+            TypeR::Susp(t, _) => RcDoc::group(
                 RcDoc::text("Σ(")
                     .append(RcDoc::line_().append(t.to_doc()).nest(2))
                     .append(RcDoc::line_())
                     .append(")"),
             ),
-            TypeE::Hole(_) => RcDoc::text("_"),
+            TypeR::Hole(_) => RcDoc::text("_"),
         }
     }
 }
 
-impl<S> Display for TypeE<S> {
+impl<S> Display for TypeR<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.to_doc().render_fmt(usize::MAX, f)
     }
 }
 
-impl<S> Display for CtxE<S> {
+impl<S> Display for CtxR<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CtxE::Tree(t) => {
+            CtxR::Tree(t) => {
                 t.fmt(f)?;
             }
-            CtxE::Other(xs) => {
+            CtxR::Other(xs) => {
                 for (name, ty) in xs {
                     write!(f, "({name} : {ty})")?;
                 }

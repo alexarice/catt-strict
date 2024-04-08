@@ -13,9 +13,9 @@ use pretty::RcDoc;
 use thiserror::Error;
 
 use crate::{
-    common::{CtxT, Environment, InferRes, Name, ToDoc},
+    common::{Ctx, Environment, InferRes, Name, ToDoc},
     parsing::{comment, ctx, ident, term, ty},
-    syntax::{CtxE, TermE, TypeE},
+    syntax::raw::{CtxR, TermR, TypeR},
     typecheck::TypeCheckError,
 };
 
@@ -48,7 +48,7 @@ where
     #[error("Other report")]
     Report(Vec<Report<'static, (Id, Range<usize>)>>),
     #[error("Assertion failed: Terms \"{}\" and \"{}\" are not equal", .0.fg(Color::Red), .1.fg(Color::Red))]
-    Assertion(TermE<Range<usize>>, TermE<Range<usize>>, Range<usize>),
+    Assertion(TermR<Range<usize>>, TermR<Range<usize>>, Range<usize>),
 }
 
 impl<Id: Debug + Hash + PartialEq + Eq + Clone> CattError<Id> {
@@ -91,18 +91,18 @@ impl<Id: Debug + Hash + PartialEq + Eq + Clone> CattError<Id> {
 }
 
 pub enum Command {
-    DefHead(Name, TermE<Range<usize>>),
-    DefCtx(Name, CtxE<Range<usize>>, TermE<Range<usize>>),
+    DefHead(Name, TermR<Range<usize>>),
+    DefCtx(Name, CtxR<Range<usize>>, TermR<Range<usize>>),
     DefWT(
         Name,
-        CtxE<Range<usize>>,
-        TypeE<Range<usize>>,
-        TermE<Range<usize>>,
+        CtxR<Range<usize>>,
+        TypeR<Range<usize>>,
+        TermR<Range<usize>>,
     ),
 
-    Normalise(CtxE<Range<usize>>, TermE<Range<usize>>),
-    AssertEq(CtxE<Range<usize>>, TermE<Range<usize>>, TermE<Range<usize>>),
-    Size(CtxE<Range<usize>>, TermE<Range<usize>>),
+    Normalise(CtxR<Range<usize>>, TermR<Range<usize>>),
+    AssertEq(CtxR<Range<usize>>, TermR<Range<usize>>, TermR<Range<usize>>),
+    Size(CtxR<Range<usize>>, TermR<Range<usize>>),
     Import(PathBuf, Range<usize>),
 }
 
@@ -162,12 +162,12 @@ impl Command {
             ($ctx: expr, $tm: expr, $ty: expr) => {
                 println!(
                     "{}",
-                    $tm.to_expr(Some($ctx), env.implicits).to_doc().pretty(80)
+                    $tm.to_raw(Some($ctx), env.implicits).to_doc().pretty(80)
                 );
                 println!(
                     "{} {}",
                     "has type".fg(Color::Blue),
-                    $ty.to_expr(Some($ctx), env.implicits)
+                    $ty.to_raw(Some($ctx), env.implicits)
                         .to_doc()
                         .nest(9)
                         .pretty(80)
@@ -235,7 +235,7 @@ impl Command {
                         println!(
                             "{} {}",
                             "Checked".fg(Color::Blue),
-                            tmt.to_expr(Some(&$l.ctx), env.implicits)
+                            tmt.to_raw(Some(&$l.ctx), env.implicits)
                                 .to_doc()
                                 .nest(8)
                                 .pretty(80)
@@ -275,7 +275,7 @@ impl Command {
                                         RcDoc::line()
                                             .append(
                                                 tmn.quote()
-                                                    .to_expr(Some(&$l.ctx), env.implicits)
+                                                    .to_raw(Some(&$l.ctx), env.implicits)
                                                     .to_doc()
                                             )
                                             .nest(2)
@@ -287,7 +287,7 @@ impl Command {
                                                 RcDoc::line()
                                                     .append(
                                                         tyn.quote()
-                                                            .to_expr(Some(&$l.ctx), env.implicits)
+                                                            .to_raw(Some(&$l.ctx), env.implicits)
                                                             .to_doc()
                                                     )
                                                     .nest(2)
@@ -359,8 +359,8 @@ impl Command {
                         let tyn2 = tyt2.eval(&sem_ctx, env);
 
                         if tyn1 != tyn2 {
-                            let x = tyt1.to_expr(Some(&$l.ctx), env.implicits);
-                            let y = tyt2.to_expr(Some(&$l.ctx), env.implicits);
+                            let x = tyt1.to_raw(Some(&$l.ctx), env.implicits);
+                            let y = tyt2.to_raw(Some(&$l.ctx), env.implicits);
                             let span = tm1.span().start..tm2.span().end();
                             return Err(CattError::TypeCheckError(
                                 TypeCheckError::InferredTypesNotEqual(tm1, x, tm2, y, span),
