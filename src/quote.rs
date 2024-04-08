@@ -1,6 +1,10 @@
-use crate::{syntax::{normal::{HeadN, TermN, TypeNRef}, core::{TermC, ArgsWithTypeC, TypeC}}, common::{Path, Position}};
-
-
+use crate::{
+    common::{Path, Position},
+    syntax::{
+        core::{ArgsWithTypeC, TermC, TypeC},
+        normal::{HeadN, TermN, TypeNRef},
+    },
+};
 
 impl HeadN {
     pub(crate) fn quote(&self) -> TermC<Path> {

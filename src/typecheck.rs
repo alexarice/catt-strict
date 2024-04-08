@@ -7,13 +7,13 @@ use either::Either;
 use thiserror::Error;
 
 use crate::common::{Ctx, Environment, Eval, InferRes, InferResEither, Level, Path, Position};
-use crate::syntax::normal::TypeNRef;
 use crate::syntax::core::ArgsC;
+use crate::syntax::normal::TypeNRef;
 use crate::{
     common::{Name, NoDispOption, Spanned, Tree},
+    syntax::core::{ArgsWithTypeC, TermC, TypeC},
     syntax::normal::TypeN,
     syntax::raw::{ArgsR, CtxR, LabelR, SubR, TermR, TypeR},
-    syntax::core::{ArgsWithTypeC, TermC, TypeC},
 };
 
 pub(crate) struct Local<T: Position> {

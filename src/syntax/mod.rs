@@ -1,3 +1,3 @@
-pub mod raw;
 pub mod core;
 pub mod normal;
+pub mod raw;
