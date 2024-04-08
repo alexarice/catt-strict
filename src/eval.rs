@@ -6,7 +6,7 @@ use crate::{
     common::{
         Container, Environment, Eval, Insertion, Level, Name, NoDispOption, Path, Position, Tree,
     },
-    syntax::normal::{HeadN, TermN, TypeN, TypeNRef},
+    syntax::normal::{HeadN, TermN, TypeN},
     syntax::core::{ArgsC, ArgsWithTypeC, TermC, TypeC},
 };
 
@@ -274,43 +274,6 @@ impl<S: Eval> TypeC<S> {
 impl<S: Eval, T: Eval> ArgsWithTypeC<S, T> {
     pub(crate) fn eval<U: Clone>(&self, ctx: &SemCtx<T, U>, env: &Environment) -> SemCtx<S, U> {
         S::eval_args(&self.args, &self.ty, ctx, env)
-    }
-}
-
-impl HeadN {
-    pub(crate) fn quote(&self) -> TermC<Path> {
-        match self {
-            HeadN::CohN { tree, ty } => TermC::Coh(tree.clone(), Box::new(ty.quote())),
-            HeadN::CompN { tree } => TermC::Comp(tree.clone()),
-            HeadN::IdN { dim } => TermC::Id(*dim),
-        }
-    }
-}
-
-impl<T: Position> TermN<T> {
-    pub(crate) fn quote(&self) -> TermC<T> {
-        match self {
-            TermN::Variable(x) => TermC::Var(x.clone()),
-            TermN::Other(head, args) => TermC::AppPath(
-                Box::new(head.quote()),
-                ArgsWithTypeC {
-                    args: args.map_ref(&|tm| tm.quote()),
-                    ty: Box::new(TypeC::Base),
-                },
-            ),
-        }
-    }
-}
-
-impl<T: Position> TypeNRef<T> {
-    pub(crate) fn quote(&self) -> TypeC<T> {
-        let mut ret = TypeC::Base;
-
-        for (s, t) in &self.0 {
-            ret = TypeC::Arr(s.quote(), Box::new(ret), t.quote())
-        }
-
-        ret
     }
 }
 
