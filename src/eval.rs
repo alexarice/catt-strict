@@ -169,11 +169,11 @@ fn eval_coh<T: Clone>(
 impl Eval for Path {
     fn eval<T: Clone>(tm: &TermC<Self>, ctx: &SemCtx<Self, T>, env: &Environment) -> TermN<T> {
         match tm {
-            TermC::AppLvl(t, awt) => {
+            TermC::AppSub(t, awt) => {
                 let sem_ctx = awt.eval(ctx, env);
                 t.eval(&sem_ctx, env)
             }
-            TermC::AppPath(t, awt) => {
+            TermC::AppLabel(t, awt) => {
                 let sem_ctx = awt.eval(ctx, env);
                 t.eval(&sem_ctx, env)
             }
@@ -216,11 +216,11 @@ impl Eval for Path {
 impl Eval for Level {
     fn eval<T: Clone>(tm: &TermC<Self>, ctx: &SemCtx<Self, T>, env: &Environment) -> TermN<T> {
         match tm {
-            TermC::AppLvl(t, awt) => {
+            TermC::AppSub(t, awt) => {
                 let sem_ctx = awt.eval(ctx, env);
                 t.eval(&sem_ctx, env)
             }
-            TermC::AppPath(t, awt) => {
+            TermC::AppLabel(t, awt) => {
                 let sem_ctx = awt.eval(ctx, env);
                 t.eval(&sem_ctx, env)
             }

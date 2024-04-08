@@ -3,17 +3,17 @@ use std::ops::RangeInclusive;
 use derivative::Derivative;
 use either::Either;
 
-use super::raw::{TermRS, TypeRS};
+use super::raw::{ArgsR, ArgsWithTypeR, TermRS, TypeRS};
 use crate::{
     common::{Container, Ctx, Level, Name, NoDispOption, Path, Position, Spanned, Tree},
-    syntax::raw::{ArgsR, ArgsWithTypeR, TermR, TypeR},
+    syntax::raw::{TermR, TypeR},
 };
 
 #[derive(Clone, Debug, Derivative)]
 #[derivative(PartialEq, Eq)]
 pub enum TermC<T: Clone> {
-    AppLvl(Box<TermC<Level>>, ArgsWithTypeC<Level, T>),
-    AppPath(Box<TermC<Path>>, ArgsWithTypeC<Path, T>),
+    AppSub(Box<TermC<Level>>, ArgsWithTypeC<Level, T>),
+    AppLabel(Box<TermC<Path>>, ArgsWithTypeC<Path, T>),
     Var(T),
     TopLvl(Name, Box<TermC<T>>),
     Susp(Box<TermC<T>>),
@@ -48,11 +48,11 @@ pub enum TypeC<T: Clone> {
 impl<T: Position> TermC<T> {
     pub(crate) fn to_raw(&self, ctx: Option<&T::Ctx>, with_ict: bool) -> TermRS<()> {
         let tm = match self {
-            TermC::AppLvl(tm, args) => TermR::App(
+            TermC::AppSub(tm, args) => TermR::App(
                 Box::new(tm.to_raw(None, with_ict)),
                 args.to_raw(ctx, with_ict),
             ),
-            TermC::AppPath(tm, args) => TermR::App(
+            TermC::AppLabel(tm, args) => TermR::App(
                 Box::new(tm.to_raw(None, with_ict)),
                 args.to_raw(ctx, with_ict),
             ),
@@ -75,29 +75,24 @@ impl<T: Position> TermC<T> {
 impl<S: Position, T: Position> ArgsWithTypeC<S, T> {
     pub(crate) fn to_raw(&self, ctx: Option<&T::Ctx>, with_ict: bool) -> ArgsWithTypeR<()> {
         let args = match self.args.to_tree_or_vec() {
-            Either::Right(s) => ArgsR::Sub(Spanned(
-                s.iter().map(|tm| tm.to_raw(ctx, with_ict)).collect(),
-                (),
-            )),
-            Either::Left(l) => ArgsR::Label(Spanned(
-                if !with_ict {
-                    l.label_from_max(
-                        &mut l
-                            .get_maximal_elements()
-                            .into_iter()
-                            .map(|tm| tm.to_raw(ctx, with_ict)),
-                    )
-                    .unwrap()
-                } else {
-                    l.map_ref(&|tm| NoDispOption(Some(tm.to_raw(ctx, with_ict))))
-                },
-                (),
-            )),
+            Either::Right(s) => ArgsR::Sub(s.iter().map(|tm| tm.to_raw(ctx, with_ict)).collect()),
+            Either::Left(l) => ArgsR::Label(if !with_ict {
+                l.label_from_max(
+                    &mut l
+                        .get_maximal_elements()
+                        .into_iter()
+                        .map(|tm| tm.to_raw(ctx, with_ict)),
+                )
+                .unwrap()
+            } else {
+                l.map_ref(&|tm| NoDispOption(Some(tm.to_raw(ctx, with_ict))))
+            }),
         };
 
         ArgsWithTypeR {
             args,
             ty: with_ict.then_some(Box::new(self.ty.to_raw(ctx, with_ict))),
+            sp: (),
         }
     }
 }
@@ -158,7 +153,7 @@ impl Tree<NoDispOption<Name>> {
             let src = self.bdry(d - 1, false);
             let tgt = self.bdry(d - 1, true);
             TypeC::Arr(
-                TermC::AppPath(
+                TermC::AppLabel(
                     Box::new(src.standard_term(d - 1)),
                     ArgsWithTypeC {
                         args: ptree.bdry(d - 1, false),
@@ -166,7 +161,7 @@ impl Tree<NoDispOption<Name>> {
                     },
                 ),
                 Box::new(self.standard_type(d - 1)),
-                TermC::AppPath(
+                TermC::AppLabel(
                     Box::new(tgt.standard_term(d - 1)),
                     ArgsWithTypeC {
                         args: ptree.bdry(d - 1, true),

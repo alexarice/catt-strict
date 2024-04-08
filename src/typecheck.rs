@@ -12,7 +12,7 @@ use crate::{
     syntax::{
         core::{ArgsC, ArgsWithTypeC, TermC, TypeC},
         normal::{TypeN, TypeNRef},
-        raw::{ArgsR, CtxR, LabelR, SubR, TermR, TermRS, TypeR, TypeRS},
+        raw::{ArgsR, ArgsWithTypeR, CtxR, LabelR, SubR, TermR, TermRS, TypeR, TypeRS},
     },
 };
 
@@ -72,7 +72,7 @@ pub enum TypeCheckError<S> {
     #[error("Dimension mismatch in labeling \"{}\"", .0.fg(Color::Red))]
     DimensionMismatch(LabelR<S>, S),
     #[error("Substitution \"{}\" cannot be coerced to labelling", .0.fg(Color::Red))]
-    SubToLabel(ArgsR<S>, S),
+    SubToLabel(ArgsWithTypeR<S>),
     #[error("Term \"{}\" should live over tree \"{}\"", .0.fg(Color::Red), .1.fg(Color::Green))]
     TermNotTree(TermRS<S>, Tree<NoDispOption<Name>>),
     #[error("Locally maximal argument missing from labelling \"{}\"", .0.fg(Color::Red))]
@@ -94,7 +94,6 @@ impl TypeCheckError<Range<usize>> {
         match self {
             TypeCheckError::UnknownTopLevel(_, s)
             | TypeCheckError::UnknownLocal(_, s)
-            | TypeCheckError::SubToLabel(_, s)
             | TypeCheckError::InferredTypesNotEqual(_, _, _, _, s)
             | TypeCheckError::LabelMismatch(_, _, _, s)
             | TypeCheckError::DimensionMismatch(_, s)
@@ -102,6 +101,7 @@ impl TypeCheckError<Range<usize>> {
             | TypeCheckError::Hole(s)
             | TypeCheckError::WrongArgs(_, _, s, _)
             | TypeCheckError::IdNotDisc(s, _) => s,
+            TypeCheckError::SubToLabel(args) => &args.sp,
             TypeCheckError::Fullness(ty)
             | TypeCheckError::TypeMismatch(ty, _)
             | TypeCheckError::CannotCheck(ty) => &ty.1,
@@ -222,9 +222,9 @@ impl TypeCheckError<Range<usize>> {
                         .with_color(Color::Red),
                 );
             }
-            TypeCheckError::SubToLabel(_, sp) => {
+            TypeCheckError::SubToLabel(args) => {
                 report.add_label(
-                    ariadne::Label::new((src.clone(), sp))
+                    ariadne::Label::new((src.clone(), args.sp))
                         .with_message("Substitution cannot be coerced")
                         .with_color(Color::Red),
                 );
@@ -348,12 +348,12 @@ impl<S: Clone + Debug> TermRS<S> {
                 }
             }),
             TermR::App(head, args) => match &args.args {
-                ArgsR::Sub(Spanned(sub, sp)) => {
+                ArgsR::Sub(sub) => {
                     let res = head.infer(env)?;
                     match res {
                         Either::Left(InferRes { ctx, tm, ty }) => {
-                            let label = LabelR::from_sub(sub, &ctx, sp)?;
-                            let (l, lty) = label.infer(env, local, sp)?;
+                            let label = LabelR::from_sub(sub, &args.ty, &ctx, &args.sp)?;
+                            let (l, lty) = label.infer(env, local, &args.sp)?;
 
                             if let Some(t) = &args.ty {
                                 t.check(env, local, &lty)?;
@@ -365,7 +365,7 @@ impl<S: Clone + Debug> TermRS<S> {
                             };
 
                             Ok((
-                                TermC::AppPath(Box::new(tm), awt.clone()),
+                                TermC::AppLabel(Box::new(tm), awt.clone()),
                                 TypeC::AppPath(Box::new(ty), awt),
                             ))
                         }
@@ -374,7 +374,7 @@ impl<S: Clone + Debug> TermRS<S> {
                                 return Err(TypeCheckError::WrongArgs(
                                     *head.clone(),
                                     ctx.len(),
-                                    sp.clone(),
+                                    args.sp.clone(),
                                     sub.len(),
                                 ));
                             }
@@ -415,20 +415,20 @@ impl<S: Clone + Debug> TermRS<S> {
                             }
 
                             Ok((
-                                TermC::AppLvl(Box::new(tm), awt.clone()),
+                                TermC::AppSub(Box::new(tm), awt.clone()),
                                 TypeC::AppLvl(Box::new(ty), awt),
                             ))
                         }
                     }
                 }
-                ArgsR::Label(Spanned(l, sp)) => {
+                ArgsR::Label(l) => {
                     let (tmt, tyt) = head.check(
                         env,
                         &l.path_tree()
                             .map(&|p| NoDispOption(Some(p.to_name())))
                             .to_map(),
                     )?;
-                    let (lt, tyn) = l.infer(env, local, sp)?;
+                    let (lt, tyn) = l.infer(env, local, &args.sp)?;
 
                     let awt = ArgsWithTypeC {
                         args: lt,
@@ -440,7 +440,7 @@ impl<S: Clone + Debug> TermRS<S> {
                     }
 
                     Ok((
-                        TermC::AppPath(Box::new(tmt), awt.clone()),
+                        TermC::AppLabel(Box::new(tmt), awt.clone()),
                         TypeC::AppPath(Box::new(tyt), awt),
                     ))
                 }
@@ -572,10 +572,19 @@ impl<S: Clone + Debug> TypeRS<S> {
 }
 
 impl<S: Clone + Debug> LabelR<S> {
-    fn from_sub<T>(sub: &SubR<S>, tree: &Tree<T>, sp: &S) -> Result<Self, TypeCheckError<S>> {
+    fn from_sub<T>(
+        sub: &SubR<S>,
+        ty: &Option<Box<TypeRS<S>>>,
+        tree: &Tree<T>,
+        sp: &S,
+    ) -> Result<Self, TypeCheckError<S>> {
         let mut iter = sub.iter().cloned();
         tree.label_from_max(&mut iter).ok_or_else(|| {
-            TypeCheckError::SubToLabel(ArgsR::Sub(Spanned(sub.clone(), sp.clone())), sp.clone())
+            TypeCheckError::SubToLabel(ArgsWithTypeR {
+                args: ArgsR::Sub(sub.clone()),
+                ty: ty.clone(),
+                sp: sp.clone(),
+            })
         })
     }
 

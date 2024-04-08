@@ -1,6 +1,6 @@
 import eh-common
 
-def whisk_l_coh = coh [ {x{f{a}g}y} : comp[a, unitor_l_inv(g)] -> comp[unitor_l_inv(f), comp[id(x),[a]]] ]
+def whisk_l_coh = coh [ x{f{a}g}y : comp[a, unitor_l_inv(g)] -> comp[unitor_l_inv(f), comp[id(x),[a]]] ]
 
 def whisk_l_sq (x : *) (a : id(x) -> id(x)) : comp[a,unitor_inv(x)] -> comp[unitor_inv(x),comp[id(x),[a]]]
   = comp [ comp[a, [unitor_l_inv_compat_inv(x)]]
@@ -8,7 +8,7 @@ def whisk_l_sq (x : *) (a : id(x) -> id(x)) : comp[a,unitor_inv(x)] -> comp[unit
 	  , comp[[unitor_l_inv_compat(x)], comp[id(x),[a]]]
           ]
 
-def whisk_r_coh = coh [ {x{f{a}g}y} : comp[a, unitor_r_inv(g)] -> comp[unitor_r_inv(f), comp[[a], id(y)]]]
+def whisk_r_coh = coh [ x{f{a}g}y : comp[a, unitor_r_inv(g)] -> comp[unitor_r_inv(f), comp[[a], id(y)]]]
 
 def whisk_r_sq (x : *) (a : id(x) -> id(x)) : comp[a,unitor_inv(x)] -> comp[unitor_inv(x),comp[[a], id(x)]]
   = comp [ comp[a, [unitor_r_inv_compat_inv(x)]]
@@ -16,7 +16,7 @@ def whisk_r_sq (x : *) (a : id(x) -> id(x)) : comp[a,unitor_inv(x)] -> comp[unit
 	  , comp[[unitor_r_inv_compat(x)], comp[[a], id(x)]]
           ]
 
-def whisk_l_coh_inv = coh [ {x{f{a}g}y} : comp[comp[id(x),[a]], unitor_l(g)] -> comp[unitor_l(f), a] ]
+def whisk_l_coh_inv = coh [ x{f{a}g}y : comp[comp[id(x),[a]], unitor_l(g)] -> comp[unitor_l(f), a] ]
 
 def whisk_l_sq_inv (x : *) (a : id(x) -> id(x)) : comp[comp[id(x),[a]],unitor(x)] -> comp[unitor(x),a]
   = comp [ comp[comp[id(x),[a]], [unitor_l_compat_inv(x)]]
@@ -24,7 +24,7 @@ def whisk_l_sq_inv (x : *) (a : id(x) -> id(x)) : comp[comp[id(x),[a]],unitor(x)
 	  , comp[[unitor_l_compat(x)], a]
           ]
 
-def whisk_r_coh_inv = coh [ {x{f{a}g}y} : comp[comp[[a], id(y)], unitor_r(g)] -> comp[unitor_r(f), a]]
+def whisk_r_coh_inv = coh [ x{f{a}g}y : comp[comp[[a], id(y)], unitor_r(g)] -> comp[unitor_r(f), a]]
 
 def whisk_r_sq_inv (x : *) (a : id(x) -> id(x)) : comp[comp[[a], id(x)],unitor(x)] -> comp[unitor(x),a]
   = comp [ comp[comp[[a], id(x)], [unitor_r_compat_inv(x)]]

@@ -1,4 +1,4 @@
-def t {{f{a}g}{h{b}i}} = comp [comp [[a],h], comp [g,[b]]]
+def t {f{a}g}{h{b}i} = comp [comp [[a],h], comp [g,[b]]]
 
 def endo_coh = coh [ [[a],[b]] : t(a,b) -> t(a,b) ]
 
@@ -8,6 +8,10 @@ def test [[[c]],[a],[b]] = comp [[[c]],[[endo_coh(a,b)]]]
 
 normalise [[[c]],[a],[b]] | test(c,a,b)
 
-def test2 {x{f}y} = p0 [f]
+def test2 x{f}y = p0 [f]
 
 normalise (x : *) (f : x -> x) | test2(f)
+
+def test3 x{f}y = p0 <x{f}y>
+
+normalise (x : *) (f : id(x) -> id(x)) | test3(* | x -> x, f)

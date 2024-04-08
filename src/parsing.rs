@@ -29,43 +29,42 @@ where
             .map(NoDispOption)
             .map(Tree::singleton)
             .then(
-                tr.then(el.clone().or_not().padded_by(comment()).map(NoDispOption))
-                    .repeated(),
+                tr.delimited_by(just("{"), just("}"))
+                    .then(el.clone().or_not().padded_by(comment()).map(NoDispOption))
+                    .repeated()
+                    .at_least(1),
             )
-            .delimited_by(just("{"), just("}"))
             .foldl(|mut tree, (br, el)| {
                 tree.elements.push(el);
                 tree.branches.push(br);
                 tree
             })
+            .or(el
+                .padded_by(comment())
+                .map(|el| Tree::singleton(NoDispOption(Some(el)))))
     })
-    .or(recursive(move |tr| {
-        el.clone()
-            .padded_by(comment())
+}
+
+fn tree_max<O: 'static, P>(
+    el: P,
+) -> impl Parser<char, Tree<NoDispOption<O>>, Error = Simple<char>> + Clone
+where
+    P: Parser<char, O, Error = Simple<char>> + Clone + 'static,
+{
+    recursive(move |tr| {
+        tr.padded_by(comment())
+            .or(el
+                .clone()
+                .padded_by(comment())
+                .map(|e| Tree::singleton(NoDispOption(Some(e)))))
             .separated_by(just(","))
             .at_least(1)
             .delimited_by(just("["), just("]"))
-            .map(|xs| Tree {
-                elements: (0..=xs.len()).map(|_| NoDispOption(None)).collect(),
-                branches: xs
-                    .into_iter()
-                    .map(|e| Tree::singleton(NoDispOption(Some(e))))
-                    .collect(),
+            .map(|trs| Tree {
+                elements: (0..=trs.len()).map(|_| NoDispOption(None)).collect(),
+                branches: trs,
             })
-            .or(tr
-                .padded_by(comment())
-                .or(el
-                    .clone()
-                    .padded_by(comment())
-                    .map(|e| Tree::singleton(NoDispOption(Some(e)))))
-                .separated_by(just(","))
-                .at_least(1)
-                .delimited_by(just("["), just("]"))
-                .map(|trs| Tree {
-                    elements: (0..=trs.len()).map(|_| NoDispOption(None)).collect(),
-                    branches: trs,
-                }))
-    }))
+    })
 }
 
 pub(crate) fn ident() -> impl Parser<char, Name, Error = Simple<char>> + Clone {
@@ -89,6 +88,7 @@ where
         .ignore_then(text::whitespace())
         .ignore_then(
             tree(ident())
+                .or(tree_max(ident()))
                 .padded_by(comment())
                 .then(just(":").ignore_then(ty_internal(term.clone()).padded_by(comment())))
                 .delimited_by(just("["), just("]")),
@@ -105,35 +105,43 @@ where
         .map_with_span(Spanned)
 }
 
-fn args<P>(term: P) -> impl Parser<char, ArgsR<Range<usize>>, Error = Simple<char>> + Clone
-where
-    P: Parser<char, TermRS<Range<usize>>, Error = Simple<char>> + Clone + 'static,
-{
-    term.clone()
-        .padded_by(comment())
-        .separated_by(just(","))
-        .at_least(1)
-        .delimited_by(just("("), just(")"))
-        .map_with_span(Spanned)
-        .map(ArgsR::Sub)
-        .or(tree(term).map_with_span(Spanned).map(ArgsR::Label))
-}
-
 fn args_with_type<P>(
     term: P,
 ) -> impl Parser<char, ArgsWithTypeR<Range<usize>>, Error = Simple<char>> + Clone
 where
     P: Parser<char, TermRS<Range<usize>>, Error = Simple<char>> + Clone + 'static,
 {
-    args(term.clone())
+    ty_internal(term.clone())
+        .map(Box::new)
+        .padded_by(comment())
+        .then_ignore(just(","))
+        .or_not()
         .then(
-            ty_internal(term)
-                .map(Box::new)
+            term.clone()
                 .padded_by(comment())
-                .delimited_by(just("<"), just(">"))
-                .or_not(),
+                .separated_by(just(","))
+                .at_least(1),
         )
-        .map(|(args, ty)| ArgsWithTypeR { args, ty })
+        .delimited_by(just("("), just(")"))
+        .map_with_span(|(ty, tms), sp| ArgsWithTypeR {
+            args: ArgsR::Sub(tms),
+            ty,
+            sp,
+        })
+        .or(tree(term.clone())
+            .then(
+                just(":")
+                    .ignore_then(ty_internal(term.clone()).padded_by(comment()))
+                    .map(Box::new)
+                    .or_not(),
+            )
+            .delimited_by(just("<").or(just("⟨")), just(">").or(just("⟩")))
+            .or(tree_max(term.clone()).map(|x| (x, None)))
+            .map_with_span(|(l, ty), sp| ArgsWithTypeR {
+                args: ArgsR::Label(l),
+                ty,
+                sp,
+            }))
 }
 
 fn ty_internal<P>(term: P) -> impl Parser<char, TypeRS<Range<usize>>, Error = Simple<char>> + Clone
@@ -169,14 +177,17 @@ fn ctx_internal<P>(term: P) -> impl Parser<char, CtxR<Range<usize>>, Error = Sim
 where
     P: Parser<char, TermRS<Range<usize>>, Error = Simple<char>> + Clone,
 {
-    tree(ident()).map(CtxR::Tree).or(ident()
-        .padded_by(comment())
-        .then(just(":").ignore_then(ty_internal(term.clone()).padded_by(comment())))
-        .delimited_by(just("("), just(")"))
-        .padded_by(comment())
-        .repeated()
-        .at_least(1)
-        .map(CtxR::Other))
+    tree(ident())
+        .or(tree_max(ident()))
+        .map(CtxR::Tree)
+        .or(ident()
+            .padded_by(comment())
+            .then(just(":").ignore_then(ty_internal(term.clone()).padded_by(comment())))
+            .delimited_by(just("("), just(")"))
+            .padded_by(comment())
+            .repeated()
+            .at_least(1)
+            .map(CtxR::Other))
 }
 
 pub(crate) fn term() -> impl Parser<char, TermRS<Range<usize>>, Error = Simple<char>> + Clone {

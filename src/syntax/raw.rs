@@ -11,6 +11,7 @@ use crate::common::{Name, NoDispOption, Spanned, ToDoc, Tree};
 pub struct ArgsWithTypeR<S> {
     pub(crate) args: ArgsR<S>,
     pub(crate) ty: Option<Box<TypeRS<S>>>,
+    pub(crate) sp: S,
 }
 
 pub type TermRS<S> = Spanned<TermR<S>, S>;
@@ -32,8 +33,8 @@ pub type LabelR<S> = Tree<NoDispOption<TermRS<S>>>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ArgsR<S> {
-    Sub(Spanned<SubR<S>, S>),
-    Label(Spanned<LabelR<S>, S>),
+    Sub(SubR<S>),
+    Label(LabelR<S>),
 }
 
 pub type TypeRS<S> = Spanned<TypeR<S>, S>;
@@ -55,23 +56,54 @@ pub enum CtxR<S> {
 
 impl<S> ToDoc for ArgsWithTypeR<S> {
     fn to_doc(&self) -> RcDoc<'_> {
-        let ty_part = if let Some(ty) = &self.ty {
-            RcDoc::line_()
-                .append(RcDoc::group(
-                    RcDoc::text("<")
-                        .append(RcDoc::line_().append(ty.to_doc()))
-                        .nest(2)
-                        .append(RcDoc::line_())
-                        .append(">"),
-                ))
-                .nest(2)
-        } else {
-            RcDoc::nil()
-        };
-
-        RcDoc::group(self.args.to_doc().append(ty_part))
+        match &self.args {
+            ArgsR::Sub(args) => RcDoc::group(
+                RcDoc::text("(")
+                    .append(if let Some(ty) = &self.ty {
+                        ty.to_doc().append(",").nest(1)
+                    } else {
+                        RcDoc::nil()
+                    })
+                    .append(
+                        RcDoc::intersperse(
+                            args.iter().map(ToDoc::to_doc),
+                            RcDoc::text(",").append(RcDoc::line()),
+                        )
+                        .nest(1),
+                    )
+                    .append(")"),
+            ),
+            ArgsR::Label(l) => {
+                if l.is_max_tree() && self.ty.is_none() {
+                    l.to_doc_max()
+                } else {
+                    RcDoc::group(
+                        RcDoc::text("⟨")
+                            .append(l.to_doc().nest(1))
+                            .append(if let Some(ty) = &self.ty {
+                                RcDoc::text(":").append(ty.to_doc())
+                            } else {
+                                RcDoc::nil()
+                            })
+                            .append(RcDoc::text("⟩")),
+                    )
+                }
+            }
+        }
     }
 }
+
+macro_rules! to_doc_disp {
+    ($ty: ident) => {
+        impl<S> Display for $ty<S> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                self.to_doc().render_fmt(usize::MAX, f)
+            }
+        }
+    };
+}
+
+to_doc_disp!(ArgsWithTypeR);
 
 impl<S> ToDoc for TermR<S> {
     fn to_doc(&self) -> RcDoc<'_> {
@@ -107,42 +139,7 @@ impl<S> ToDoc for TermR<S> {
     }
 }
 
-impl<S> Display for TermR<S> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.to_doc().render_fmt(usize::MAX, f)
-    }
-}
-
-impl<S> ToDoc for ArgsR<S> {
-    fn to_doc(&self) -> RcDoc<'_> {
-        match self {
-            ArgsR::Sub(Spanned(args, _)) => RcDoc::group(
-                RcDoc::text("(")
-                    .append(
-                        RcDoc::intersperse(
-                            args.iter().map(ToDoc::to_doc),
-                            RcDoc::text(",").append(RcDoc::line()),
-                        )
-                        .nest(1),
-                    )
-                    .append(")"),
-            ),
-            ArgsR::Label(l) => {
-                if l.0.is_max_tree() {
-                    l.0.to_doc_max()
-                } else {
-                    l.to_doc()
-                }
-            }
-        }
-    }
-}
-
-impl<S> Display for ArgsR<S> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.to_doc().render_fmt(usize::MAX, f)
-    }
-}
+to_doc_disp!(TermR);
 
 impl<S> ToDoc for TypeR<S> {
     fn to_doc(&self) -> RcDoc<'_> {
@@ -182,11 +179,7 @@ impl<S> ToDoc for TypeR<S> {
     }
 }
 
-impl<S> Display for TypeR<S> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.to_doc().render_fmt(usize::MAX, f)
-    }
-}
+to_doc_disp!(TypeR);
 
 impl<S> Display for CtxR<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -247,34 +240,34 @@ impl<T: ToDoc> ToDoc for Tree<NoDispOption<T>> {
         }
 
         for (e, t) in iter.zip(&self.branches) {
-            inner = inner.append(RcDoc::line_()).append(t.to_doc());
+            inner = inner.append(RcDoc::line_()).append(RcDoc::group(
+                RcDoc::text("{")
+                    .append(t.to_doc().nest(1))
+                    .append(RcDoc::line_())
+                    .append("}"),
+            ));
             let d = e.to_doc();
             if !matches!(d.deref(), Doc::Nil) {
                 inner = inner.append(RcDoc::line_()).append(d);
             }
         }
 
-        RcDoc::group(
-            RcDoc::text("{")
-                .append(inner.nest(1))
-                .append(RcDoc::line_())
-                .append("}"),
-        )
+        inner
     }
 }
 
 impl<T: Display> Display for Tree<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{")?;
         let mut iter = self.elements.iter();
         if let Some(e) = iter.next() {
             e.fmt(f)?;
         }
         for (e, t) in iter.zip(self.branches.iter()) {
+            write!(f, "{{")?;
             t.fmt(f)?;
+            write!(f, "}}")?;
             e.fmt(f)?;
         }
-        write!(f, "}}")?;
         Ok(())
     }
 }

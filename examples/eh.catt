@@ -9,11 +9,11 @@ def swap_src_norm (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x)) = comp [ whi
 
 def swap_tgt_norm (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x)) = comp [ whisk_l_norm(x, b) , whisk_r_norm(x, a) ]
 
-def unitor_2_l = coh [ {x{f{a}g}y} : comp [unitor_l_inv(f),comp [id(x), [a]], unitor_l(g)] -> a ]
-def unitor_2_l_inv = coh [ {x{f{a}g}y} : a -> comp [unitor_l_inv(f),comp [id(x), [a]], unitor_l(g)] ]
+def unitor_2_l = coh [ x{f{a}g}y : comp [unitor_l_inv(f),comp [id(x), [a]], unitor_l(g)] -> a ]
+def unitor_2_l_inv = coh [ x{f{a}g}y : a -> comp [unitor_l_inv(f),comp [id(x), [a]], unitor_l(g)] ]
 
-def unitor_2_r = coh [ {x{f{a}g}y} : comp [unitor_r_inv(f),comp [[a],id(y)],unitor_r(g)] -> a]
-def unitor_2_r_inv = coh [ {x{f{a}g}y} : a -> comp [unitor_r_inv(f),comp [[a],id(y)],unitor_r(g)] ]
+def unitor_2_r = coh [ x{f{a}g}y : comp [unitor_r_inv(f),comp [[a],id(y)],unitor_r(g)] -> a]
+def unitor_2_r_inv = coh [ x{f{a}g}y : a -> comp [unitor_r_inv(f),comp [[a],id(y)],unitor_r(g)] ]
 
 def unitor_2_l_u (x : *) (a : id(x) -> id(x)) : whisk_l_norm(x,a) -> a =
     comp [comp [[unitor_l_inv_compat_inv(x)],comp[id(x), [a]],[unitor_l_compat_inv(x)]], unitor_2_l(a)]
@@ -32,7 +32,7 @@ def tgt_norm (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x)) : swap_tgt_norm(x
   = comp [[unitor_2_l_u(x,b)],[unitor_2_r_u(x,a)]]
 
 def compat_move (x : *) (y : *) (f : x -> y) (finv : y -> x) (funit : id(y) -> comp[finv, f]) (a : y -> y) (b : y -> y) : comp[f,comp[a,b],finv] -> comp[comp[f,a,finv], comp[f,b,finv]]
-  = comp [ comp [f, [coh [ {x{f}y{g}z} : comp [f,g] -> comp [f,id(y),g]] (a,b)], finv]
+  = comp [ comp [f, [coh [ x{f}y{g}z : comp [f,g] -> comp [f,id(y),g]] (a,b)], finv]
           , comp [f, [comp[a, [funit], b]], finv]
           , coh [[a,b,c,d,e,f] : comp[a,comp[b,comp[c,d],e],f] -> comp[comp[a,b,c],comp[d,e,f]] ](f,a,finv,f,b,finv)
   	  ]
@@ -40,7 +40,7 @@ def compat_move (x : *) (y : *) (f : x -> y) (finv : y -> x) (funit : id(y) -> c
 def compat_move_inv (x : *) (y : *) (f : x -> y) (finv : y -> x) (funitinv : comp[finv, f] -> id(y)) (a : y -> y) (b : y -> y) : comp[comp[f,a,finv], comp[f,b,finv]] -> comp[f,comp[a,b],finv]
   = comp [ coh [[a,b,c,d,e,f] : comp[comp[a,b,c],comp[d,e,f]] -> comp[a,comp[b,comp[c,d],e],f] ](f,a,finv,f,b,finv)
           , comp [f, [comp[a, [funitinv], b]], finv]
-          , comp [f, [coh [ {x{f}y{g}z} : comp [f,id(y),g] -> comp [f,g]] (a,b)], finv]
+          , comp [f, [coh [ x{f}y{g}z : comp [f,id(y),g] -> comp [f,g]] (a,b)], finv]
   	  ]
 
 def swap_src_norm_compat (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x)) : swap_src_norm(x,a,b) -> wrap_unitor(x,swap_src(a,b))

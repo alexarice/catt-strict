@@ -5,19 +5,19 @@ def assoc = coh [ [f,g,h] : comp [comp[f,g],h] -> comp [f,comp[g,h]] ]
 def associnv = coh [ [f,g,h] : comp [f,comp[g,h]] -> comp [comp[f,g],h] ]
 
 
-def swap = coh [ {x{f{a}g}y{h{b}k}z}
+def swap = coh [ x{f{a}g}y{h{b}k}z
                : comp[comp [[a],h], comp[g,[b]]]
                  ->
                  comp[comp [f,[b]], comp [[a],k]]
                ]
 
-def swapinv = coh [ {x{f{a}g}y{h{b}k}z}
+def swapinv = coh [ x{f{a}g}y{h{b}k}z
                   : comp[comp[f,[b]], comp[[a],k]]
                     ->
                     comp[comp[[a],h], comp[g,[b]]]
                   ]
 
-def swapnatleft = coh [ {u{x{f{a}g}y}v{s{h}t}w}
+def swapnatleft = coh [ u{x{f{a}g}y}v{s{h}t}w
                       : comp[ comp [ [comp [[[a]],s]],
 		      	       	       comp [y,[h]]
 				     ],
@@ -31,7 +31,7 @@ def swapnatleft = coh [ {u{x{f{a}g}y}v{s{h}t}w}
 			     ]
                       ]
 
-def swapnatright = coh [ {u{x{g}y}v{s{h{b}k}t}w}
+def swapnatright = coh [ u{x{g}y}v{s{h{b}k}t}w
                        : comp[ comp [ comp [[g],s],
 		       	 	        [comp[y,[[b]]]]
 			              ],
@@ -45,7 +45,7 @@ def swapnatright = coh [ {u{x{g}y}v{s{h{b}k}t}w}
 		              ]
                        ]
 
-def left {u{x{f{a}g}y}v{s{h{b}k}t}w}
+def left u{x{f{a}g}y}v{s{h{b}k}t}w
   = comp [
             comp [
 		    [swap(comp[[[a]],s], comp[y,[[b]]])],
@@ -78,7 +78,7 @@ def left {u{x{f{a}g}y}v{s{h{b}k}t}w}
 
 
 
-def right {u{x{f{a}g}y}v{s{h{b}k}t}w}
+def right u{x{f{a}g}y}v{s{h{b}k}t}w
   = comp [
             assoc [
 	    	    comp [[comp [[[a]],s]], comp [y,[h]]],
@@ -109,7 +109,7 @@ def right {u{x{f{a}g}y}v{s{h{b}k}t}w}
 		  ]
 	  ]
 
-def syl_coh = coh [ {u{x{f{a}g}y}v{s{h{b}k}t}w}
+def syl_coh = coh [ u{x{f{a}g}y}v{s{h{b}k}t}w
                   : left(a,b)
                     ->
                     right(a,b)

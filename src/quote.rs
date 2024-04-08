@@ -20,7 +20,7 @@ impl<T: Position> TermN<T> {
     pub(crate) fn quote(&self) -> TermC<T> {
         match self {
             TermN::Variable(x) => TermC::Var(x.clone()),
-            TermN::Other(head, args) => TermC::AppPath(
+            TermN::Other(head, args) => TermC::AppLabel(
                 Box::new(head.quote()),
                 ArgsWithTypeC {
                     args: args.map_ref(&|tm| tm.quote()),
