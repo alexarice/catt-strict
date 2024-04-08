@@ -1,9 +1,11 @@
-use crate::common::{Name, NoDispOption, Spanned, ToDoc, Tree};
-use pretty::{Doc, RcDoc};
 use std::{
     fmt::Display,
     ops::{Deref, RangeInclusive},
 };
+
+use pretty::{Doc, RcDoc};
+
+use crate::common::{Name, NoDispOption, Spanned, ToDoc, Tree};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArgsWithTypeR<S> {

@@ -1,19 +1,19 @@
-use std::fmt::Debug;
-use std::hash::Hash;
-use std::{collections::HashMap, ops::Range};
+use std::{collections::HashMap, fmt::Debug, hash::Hash, ops::Range};
 
 use ariadne::{Color, Fmt, Report, ReportKind, Span};
 use either::Either;
 use thiserror::Error;
 
-use crate::common::{Ctx, Environment, Eval, InferRes, InferResEither, Level, Path, Position};
-use crate::syntax::core::ArgsC;
-use crate::syntax::normal::TypeNRef;
 use crate::{
-    common::{Name, NoDispOption, Spanned, Tree},
-    syntax::core::{ArgsWithTypeC, TermC, TypeC},
-    syntax::normal::TypeN,
-    syntax::raw::{ArgsR, CtxR, LabelR, SubR, TermR, TypeR},
+    common::{
+        Ctx, Environment, Eval, InferRes, InferResEither, Level, Name, NoDispOption, Path,
+        Position, Spanned, Tree,
+    },
+    syntax::{
+        core::{ArgsC, ArgsWithTypeC, TermC, TypeC},
+        normal::{TypeN, TypeNRef},
+        raw::{ArgsR, CtxR, LabelR, SubR, TermR, TypeR},
+    },
 };
 
 pub(crate) struct Local<T: Position> {

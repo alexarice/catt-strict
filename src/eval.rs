@@ -6,8 +6,10 @@ use crate::{
     common::{
         Container, Environment, Eval, Insertion, Level, Name, NoDispOption, Path, Position, Tree,
     },
-    syntax::core::{ArgsC, ArgsWithTypeC, TermC, TypeC},
-    syntax::normal::{HeadN, TermN, TypeN},
+    syntax::{
+        core::{ArgsC, ArgsWithTypeC, TermC, TypeC},
+        normal::{HeadN, TermN, TypeN},
+    },
 };
 
 #[derive(Clone, Debug)]

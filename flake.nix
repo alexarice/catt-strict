@@ -18,19 +18,14 @@
           pkgs = import nixpkgs {
             inherit system overlays;
           };
-          nativeBuildInputs = with pkgs; [
-            (
-              rust-bin.stable.latest.default.override {
-                extensions = [ "rust-src" ]; # seems to be already included in stable
-              }
-            )
-          ];
         in
           {
-            devShell = with pkgs; mkShell {
-              buildInputs = nativeBuildInputs ++ [
+            devShells.default = with pkgs; mkShell {
+              buildInputs = [
                 rust-analyzer
-                rust-bin.nightly.latest.rustfmt
+                (lib.hiPrio rust-bin.nightly.latest.rustfmt)
+                cargo
+                rustc
               ];
             };
           }

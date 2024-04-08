@@ -7,9 +7,11 @@ use pretty::RcDoc;
 
 use crate::{
     eval::SemCtx,
-    syntax::core::{ArgsC, TermC, TypeC},
-    syntax::normal::TermN,
-    syntax::raw::TermR,
+    syntax::{
+        core::{ArgsC, TermC, TypeC},
+        normal::TermN,
+        raw::TermR,
+    },
     typecheck::TypeCheckError,
 };
 
