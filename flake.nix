@@ -26,6 +26,7 @@
                 (lib.hiPrio rust-bin.nightly.latest.rustfmt)
                 cargo
                 rustc
+                clippy
               ];
             };
           }

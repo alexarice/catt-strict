@@ -15,7 +15,7 @@ use thiserror::Error;
 use crate::{
     common::{Ctx, Environment, InferRes, Name, ToDoc},
     parsing::{comment, ctx, ident, term, ty},
-    syntax::raw::{CtxR, TermR, TypeR},
+    syntax::raw::{CtxR, TermRS, TypeRS},
     typecheck::TypeCheckError,
 };
 
@@ -48,7 +48,7 @@ where
     #[error("Other report")]
     Report(Vec<Report<'static, (Id, Range<usize>)>>),
     #[error("Assertion failed: Terms \"{}\" and \"{}\" are not equal", .0.fg(Color::Red), .1.fg(Color::Red))]
-    Assertion(TermR<Range<usize>>, TermR<Range<usize>>, Range<usize>),
+    Assertion(TermRS<Range<usize>>, TermRS<Range<usize>>, Range<usize>),
 }
 
 impl<Id: Debug + Hash + PartialEq + Eq + Clone> CattError<Id> {
@@ -72,13 +72,13 @@ impl<Id: Debug + Hash + PartialEq + Eq + Clone> CattError<Id> {
                 let report = Report::build(ReportKind::Error, src.clone(), sp.start())
                     .with_message(message)
                     .with_label(
-                        ariadne::Label::new((src.clone(), tm1.span().clone()))
+                        ariadne::Label::new((src.clone(), tm1.1.clone()))
                             .with_message("First term")
                             .with_color(Color::Blue)
                             .with_order(0),
                     )
                     .with_label(
-                        ariadne::Label::new((src.clone(), tm2.span().clone()))
+                        ariadne::Label::new((src.clone(), tm2.1.clone()))
                             .with_message("should equal second term")
                             .with_color(Color::Magenta)
                             .with_order(1),
@@ -91,18 +91,22 @@ impl<Id: Debug + Hash + PartialEq + Eq + Clone> CattError<Id> {
 }
 
 pub enum Command {
-    DefHead(Name, TermR<Range<usize>>),
-    DefCtx(Name, CtxR<Range<usize>>, TermR<Range<usize>>),
+    DefHead(Name, TermRS<Range<usize>>),
+    DefCtx(Name, CtxR<Range<usize>>, TermRS<Range<usize>>),
     DefWT(
         Name,
         CtxR<Range<usize>>,
-        TypeR<Range<usize>>,
-        TermR<Range<usize>>,
+        TypeRS<Range<usize>>,
+        TermRS<Range<usize>>,
     ),
 
-    Normalise(CtxR<Range<usize>>, TermR<Range<usize>>),
-    AssertEq(CtxR<Range<usize>>, TermR<Range<usize>>, TermR<Range<usize>>),
-    Size(CtxR<Range<usize>>, TermR<Range<usize>>),
+    Normalise(CtxR<Range<usize>>, TermRS<Range<usize>>),
+    AssertEq(
+        CtxR<Range<usize>>,
+        TermRS<Range<usize>>,
+        TermRS<Range<usize>>,
+    ),
+    Size(CtxR<Range<usize>>, TermRS<Range<usize>>),
     Import(PathBuf, Range<usize>),
 }
 
@@ -361,13 +365,13 @@ impl Command {
                         if tyn1 != tyn2 {
                             let x = tyt1.to_raw(Some(&$l.ctx), env.implicits);
                             let y = tyt2.to_raw(Some(&$l.ctx), env.implicits);
-                            let span = tm1.span().start..tm2.span().end();
+                            let span = tm1.1.start..tm2.1.end();
                             return Err(CattError::TypeCheckError(
                                 TypeCheckError::InferredTypesNotEqual(tm1, x, tm2, y, span),
                             ));
                         }
                         if tmn1 != tmn2 {
-                            let span = tm1.span().start..tm2.span().end();
+                            let span = tm1.1.start..tm2.1.end();
                             return Err(CattError::Assertion(tm1, tm2, span));
                         }
                         println!(

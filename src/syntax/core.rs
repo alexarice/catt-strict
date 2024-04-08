@@ -3,6 +3,7 @@ use std::ops::RangeInclusive;
 use derivative::Derivative;
 use either::Either;
 
+use super::raw::{TermRS, TypeRS};
 use crate::{
     common::{Container, Ctx, Level, Name, NoDispOption, Path, Position, Spanned, Tree},
     syntax::raw::{ArgsR, ArgsWithTypeR, TermR, TypeR},
@@ -45,32 +46,29 @@ pub enum TypeC<T: Clone> {
 }
 
 impl<T: Position> TermC<T> {
-    pub(crate) fn to_raw(&self, ctx: Option<&T::Ctx>, with_ict: bool) -> TermR<()> {
-        match self {
+    pub(crate) fn to_raw(&self, ctx: Option<&T::Ctx>, with_ict: bool) -> TermRS<()> {
+        let tm = match self {
             TermC::AppLvl(tm, args) => TermR::App(
                 Box::new(tm.to_raw(None, with_ict)),
                 args.to_raw(ctx, with_ict),
-                (),
             ),
             TermC::AppPath(tm, args) => TermR::App(
                 Box::new(tm.to_raw(None, with_ict)),
                 args.to_raw(ctx, with_ict),
-                (),
             ),
-            TermC::Var(x) => TermR::Var(ctx.and_then(|c| c.get_name(x)).unwrap_or(x.to_name()), ()),
-            TermC::TopLvl(nm, _) => TermR::Var(nm.clone(), ()),
-            TermC::Susp(t) => TermR::Susp(Box::new(t.to_raw(None, with_ict)), ()),
-            TermC::Coh(tr, ty) => TermR::Coh(
-                tr.clone(),
-                Box::new(ty.to_raw(Some(&tr.clone()), with_ict)),
-                (),
-            ),
-            TermC::Include(tm, rng) => {
-                TermR::Include(Box::new(tm.to_raw(ctx, with_ict)), rng.clone(), ())
+            TermC::Var(x) => TermR::Var(ctx.and_then(|c| c.get_name(x)).unwrap_or(x.to_name())),
+            TermC::TopLvl(nm, _) => TermR::Var(nm.clone()),
+            TermC::Susp(t) => TermR::Susp(Box::new(t.to_raw(None, with_ict))),
+            TermC::Coh(tr, ty) => {
+                TermR::Coh(tr.clone(), Box::new(ty.to_raw(Some(&tr.clone()), with_ict)))
             }
-            TermC::Comp(_) => TermR::Comp(()),
-            TermC::Id(_) => TermR::Id(()),
-        }
+            TermC::Include(tm, rng) => {
+                TermR::Include(Box::new(tm.to_raw(ctx, with_ict)), rng.clone())
+            }
+            TermC::Comp(_) => TermR::Comp,
+            TermC::Id(_) => TermR::Id,
+        };
+        Spanned(tm, ())
     }
 }
 
@@ -105,27 +103,25 @@ impl<S: Position, T: Position> ArgsWithTypeC<S, T> {
 }
 
 impl<T: Position> TypeC<T> {
-    pub(crate) fn to_raw(&self, ctx: Option<&T::Ctx>, with_ict: bool) -> TypeR<()> {
-        match self {
-            TypeC::Base => TypeR::Base(()),
+    pub(crate) fn to_raw(&self, ctx: Option<&T::Ctx>, with_ict: bool) -> TypeRS<()> {
+        let ty = match self {
+            TypeC::Base => TypeR::Base,
             TypeC::Arr(s, a, t) => TypeR::Arr(
                 s.to_raw(ctx, with_ict),
                 with_ict.then_some(Box::new(a.to_raw(ctx, with_ict))),
                 t.to_raw(ctx, with_ict),
-                (),
             ),
             TypeC::AppLvl(ty, args) => TypeR::App(
                 Box::new(ty.to_raw(None, with_ict)),
                 args.to_raw(ctx, with_ict),
-                (),
             ),
             TypeC::AppPath(ty, args) => TypeR::App(
                 Box::new(ty.to_raw(None, with_ict)),
                 args.to_raw(ctx, with_ict),
-                (),
             ),
-            TypeC::Susp(ty) => TypeR::Susp(Box::new(ty.to_raw(ctx, with_ict)), ()),
-        }
+            TypeC::Susp(ty) => TypeR::Susp(Box::new(ty.to_raw(ctx, with_ict))),
+        };
+        Spanned(ty, ())
     }
 }
 

@@ -10,7 +10,7 @@ use crate::{
     syntax::{
         core::{ArgsC, TermC, TypeC},
         normal::TermN,
-        raw::TermR,
+        raw::TermRS,
     },
     typecheck::TypeCheckError,
 };
@@ -139,7 +139,7 @@ impl<T> Tree<T> {
 
     pub(crate) fn get_maximal_elements(&self) -> Vec<&T> {
         if self.branches.is_empty() {
-            vec![self.elements.last().unwrap().clone()]
+            vec![self.elements.last().unwrap()]
         } else {
             self.branches
                 .iter()
@@ -341,7 +341,7 @@ pub trait Ctx<P: Position> {
 
     fn check_in_tree<F, S>(
         &self,
-        term: &TermR<S>,
+        term: &TermRS<S>,
         func: F,
     ) -> Result<(TermC<P>, TypeC<P>), TypeCheckError<S>>
     where
@@ -400,7 +400,7 @@ impl Ctx<Level> for Vec<(Option<Name>, TypeC<Level>)> {
 
     fn check_in_tree<F, S>(
         &self,
-        term: &TermR<S>,
+        term: &TermRS<S>,
         _: F,
     ) -> Result<(TermC<Level>, TypeC<Level>), TypeCheckError<S>>
     where
@@ -409,7 +409,7 @@ impl Ctx<Level> for Vec<(Option<Name>, TypeC<Level>)> {
         ) -> Result<(TermC<Path>, TypeC<Path>), TypeCheckError<S>>,
         S: Clone,
     {
-        Err(TypeCheckError::CannotCheckCtx(term.clone()))
+        Err(TypeCheckError::TermExistsInTree(term.clone()))
     }
 }
 
@@ -444,7 +444,7 @@ impl Ctx<Path> for Tree<NoDispOption<Name>> {
 
     fn check_in_tree<F, S>(
         &self,
-        _: &TermR<S>,
+        _: &TermRS<S>,
         func: F,
     ) -> Result<(TermC<Path>, TypeC<Path>), TypeCheckError<S>>
     where

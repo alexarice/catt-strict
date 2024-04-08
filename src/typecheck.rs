@@ -12,7 +12,7 @@ use crate::{
     syntax::{
         core::{ArgsC, ArgsWithTypeC, TermC, TypeC},
         normal::{TypeN, TypeNRef},
-        raw::{ArgsR, CtxR, LabelR, SubR, TermR, TypeR},
+        raw::{ArgsR, CtxR, LabelR, SubR, TermR, TermRS, TypeR, TypeRS},
     },
 };
 
@@ -48,39 +48,43 @@ pub enum TypeCheckError<S> {
     #[error("Unknown local variable: \"{}\"", .0.fg(Color::Red))]
     UnknownLocal(Name, S),
     #[error("Type \"{}\" does not satisfy fullness condition", .0.fg(Color::Red))]
-    Fullness(TypeR<S>),
+    Fullness(TypeRS<S>),
     #[error("Cannot infer context for term \"{}\"", .0.fg(Color::Red))]
-    CannotInferCtx(TermR<S>),
-    #[error("Cannot check context for inferrable term \"{}\"", .0.fg(Color::Red))]
-    CannotCheckCtx(TermR<S>),
+    CannotInferCtx(TermRS<S>),
+    #[error("Term \"{}\" lives over a tree", .0.fg(Color::Red))]
+    TermExistsInTree(TermRS<S>),
     #[error("Identity does not exist in context \"{}\"", .1.fg(Color::Red))]
     IdNotDisc(S, Tree<NoDispOption<Name>>),
     #[error("Type \"{}\" is not checkable", .0.fg(Color::Red))]
-    CannotCheck(TypeR<S>),
+    CannotCheck(TypeRS<S>),
     #[error("Terms \"{}\" and \"{}\" do not have matching types", .0.fg(Color::Blue), .2.fg(Color::Magenta))]
-    InferredTypesNotEqual(TermR<S>, TypeR<()>, TermR<S>, TypeR<()>, S),
+    InferredTypesNotEqual(TermRS<S>, TypeRS<()>, TermRS<S>, TypeRS<()>, S),
     #[error("Term \"{}\" had inferred type \"{}\" but should have type \"{}\"", .0.fg(Color::Red), .1.fg(Color::Red), .2.fg(Color::Green))]
-    InferredTypeWrong(TermR<S>, TypeR<()>, TypeR<S>),
+    InferredTypeWrong(TermRS<S>, TypeRS<()>, TypeRS<S>),
     #[error("Term \"{}\" had inferred type \"{}\" but should have type \"{}\"", .0.fg(Color::Red), .1.fg(Color::Red), .2.fg(Color::Green))]
-    InferredTypeWrongCalc(TermR<S>, TypeR<()>, TypeR<()>),
+    InferredTypeWrongCalc(TermRS<S>, TypeRS<()>, TypeRS<()>),
     #[error("Given type \"{}\" does not match inferred type \"{}\"", .0.fg(Color::Red), .1.fg(Color::Green))]
-    TypeMismatch(TypeR<S>, TypeR<()>),
+    TypeMismatch(TypeRS<S>, TypeRS<()>),
     #[error("Given term \"{}\" does not match inferred term \"{}\"", .0.fg(Color::Red), .1.fg(Color::Green))]
-    TermMismatch(TermR<S>, TermR<()>),
+    TermMismatch(TermRS<S>, TermRS<()>),
     #[error("Mismatch between inferred terms \"{}\" and \"{}\" in labelling \"{}\"", .1.fg(Color::Magenta), .2.fg(Color::Blue), .0.fg(Color::Red))]
-    LabelMismatch(LabelR<S>, TermR<()>, TermR<()>, S),
+    LabelMismatch(LabelR<S>, TermRS<()>, TermRS<()>, S),
     #[error("Dimension mismatch in labeling \"{}\"", .0.fg(Color::Red))]
     DimensionMismatch(LabelR<S>, S),
     #[error("Substitution \"{}\" cannot be coerced to labelling", .0.fg(Color::Red))]
     SubToLabel(ArgsR<S>, S),
     #[error("Term \"{}\" should live over tree \"{}\"", .0.fg(Color::Red), .1.fg(Color::Green))]
-    TermNotTree(TermR<S>, Tree<NoDispOption<Name>>),
+    TermNotTree(TermRS<S>, Tree<NoDispOption<Name>>),
     #[error("Locally maximal argument missing from labelling \"{}\"", .0.fg(Color::Red))]
     LocallyMaxMissing(LabelR<S>, S),
     #[error("Term \"{}\" lives in context \"{}\" but inferred context was \"{}\"", .0.fg(Color::Red), .1.fg(Color::Red), .2.fg(Color::Green))]
-    TreeMismatch(TermR<S>, Tree<NoDispOption<Name>>, Tree<NoDispOption<Name>>),
+    TreeMismatch(
+        TermRS<S>,
+        Tree<NoDispOption<Name>>,
+        Tree<NoDispOption<Name>>,
+    ),
     #[error("Term \"{}\" was given the wrong number of arguments", .0.fg(Color::Red))]
-    WrongArgs(TermR<S>, usize, S, usize),
+    WrongArgs(TermRS<S>, usize, S, usize),
     #[error("Cannot check hole")]
     Hole(S),
 }
@@ -100,14 +104,14 @@ impl TypeCheckError<Range<usize>> {
             | TypeCheckError::IdNotDisc(s, _) => s,
             TypeCheckError::Fullness(ty)
             | TypeCheckError::TypeMismatch(ty, _)
-            | TypeCheckError::CannotCheck(ty) => ty.span(),
+            | TypeCheckError::CannotCheck(ty) => &ty.1,
             TypeCheckError::CannotInferCtx(tm)
-            | TypeCheckError::CannotCheckCtx(tm)
+            | TypeCheckError::TermExistsInTree(tm)
             | TypeCheckError::InferredTypeWrong(tm, _, _)
             | TypeCheckError::InferredTypeWrongCalc(tm, _, _)
             | TypeCheckError::TermMismatch(tm, _)
             | TypeCheckError::TreeMismatch(tm, _, _)
-            | TypeCheckError::TermNotTree(tm, _) => tm.span(),
+            | TypeCheckError::TermNotTree(tm, _) => &tm.1,
         }
     }
     pub(crate) fn into_report<Id>(self, src: &Id) -> Report<'static, (Id, Range<usize>)>
@@ -129,18 +133,18 @@ impl TypeCheckError<Range<usize>> {
                     .with_color(Color::Red),
             ),
             TypeCheckError::Fullness(ty) => report.add_label(
-                ariadne::Label::new((src.clone(), ty.span().clone()))
+                ariadne::Label::new((src.clone(), ty.1.clone()))
                     .with_message("Type is not full")
                     .with_color(Color::Red),
             ),
             TypeCheckError::CannotInferCtx(tm) => report.add_label(
-                ariadne::Label::new((src.clone(), tm.span().clone()))
+                ariadne::Label::new((src.clone(), tm.1.clone()))
                     .with_message("Context cannot be inferred")
                     .with_color(Color::Red),
             ),
-            TypeCheckError::CannotCheckCtx(tm) => report.add_label(
-                ariadne::Label::new((src.clone(), tm.span().clone()))
-                    .with_message("Context cannot be checked")
+            TypeCheckError::TermExistsInTree(tm) => report.add_label(
+                ariadne::Label::new((src.clone(), tm.1.clone()))
+                    .with_message("Term can only occur in disc contexts")
                     .with_color(Color::Red),
             ),
             TypeCheckError::IdNotDisc(sp, _) => report.add_label(
@@ -149,19 +153,19 @@ impl TypeCheckError<Range<usize>> {
                     .with_color(Color::Red),
             ),
             TypeCheckError::CannotCheck(ty) => report.add_label(
-                ariadne::Label::new((src.clone(), ty.span().clone()))
+                ariadne::Label::new((src.clone(), ty.1.clone()))
                     .with_message("Type is not checkable")
                     .with_color(Color::Red),
             ),
             TypeCheckError::InferredTypesNotEqual(tm1, ty1, tm2, ty2, _) => {
                 report.add_label(
-                    ariadne::Label::new((src.clone(), tm2.span().clone()))
+                    ariadne::Label::new((src.clone(), tm2.1.clone()))
                         .with_message(format!("Has type {}", ty2.fg(Color::Magenta)))
                         .with_order(0)
                         .with_color(Color::Magenta),
                 );
                 report.add_label(
-                    ariadne::Label::new((src.clone(), tm1.span().clone()))
+                    ariadne::Label::new((src.clone(), tm1.1.clone()))
                         .with_message(format!("Has type {}", ty1.fg(Color::Blue)))
                         .with_order(1)
                         .with_color(Color::Blue),
@@ -169,19 +173,19 @@ impl TypeCheckError<Range<usize>> {
             }
             TypeCheckError::InferredTypeWrong(tm, ity, gty) => {
                 report.add_label(
-                    ariadne::Label::new((src.clone(), tm.span().clone()))
+                    ariadne::Label::new((src.clone(), tm.1.clone()))
                         .with_message(format!("Term has inferred type {}", ity.fg(Color::Red)))
                         .with_color(Color::Red),
                 );
                 report.add_label(
-                    ariadne::Label::new((src.clone(), gty.span().clone()))
+                    ariadne::Label::new((src.clone(), gty.1.clone()))
                         .with_message(format!("Term should have type {}", gty.fg(Color::Green)))
                         .with_color(Color::Green),
                 );
             }
             TypeCheckError::InferredTypeWrongCalc(tm, ity, gty) => {
                 report.add_label(
-                    ariadne::Label::new((src.clone(), tm.span().clone()))
+                    ariadne::Label::new((src.clone(), tm.1.clone()))
                         .with_message(format!(
                             "Term has inferred type {} but should have type {}",
                             ity.fg(Color::Red),
@@ -192,14 +196,14 @@ impl TypeCheckError<Range<usize>> {
             }
             TypeCheckError::TypeMismatch(ty, _) => {
                 report.add_label(
-                    ariadne::Label::new((src.clone(), ty.span().clone()))
+                    ariadne::Label::new((src.clone(), ty.1.clone()))
                         .with_message("Given type")
                         .with_color(Color::Red),
                 );
             }
             TypeCheckError::TermMismatch(tm, _) => {
                 report.add_label(
-                    ariadne::Label::new((src.clone(), tm.span().clone()))
+                    ariadne::Label::new((src.clone(), tm.1.clone()))
                         .with_message("Given term")
                         .with_color(Color::Red),
                 );
@@ -233,18 +237,18 @@ impl TypeCheckError<Range<usize>> {
                 );
             }
             TypeCheckError::TermNotTree(t, _) => report.add_label(
-                ariadne::Label::new((src.clone(), t.span().clone()))
+                ariadne::Label::new((src.clone(), t.1.clone()))
                     .with_message("Term does not live over tree context")
                     .with_color(Color::Red),
             ),
             TypeCheckError::TreeMismatch(t, _, _) => report.add_label(
-                ariadne::Label::new((src.clone(), t.span().clone()))
+                ariadne::Label::new((src.clone(), t.1.clone()))
                     .with_message("Term does not live over correct tree")
                     .with_color(Color::Red),
             ),
             TypeCheckError::WrongArgs(t, x, sp, y) => {
                 report.add_label(
-                    ariadne::Label::new((src.clone(), t.span().clone()))
+                    ariadne::Label::new((src.clone(), t.1.clone()))
                         .with_message(format!("Term expected {x} arguments"))
                         .with_color(Color::Red),
                 );
@@ -264,15 +268,15 @@ impl TypeCheckError<Range<usize>> {
     }
 }
 
-impl<S: Clone + Debug> TermR<S> {
+impl<S: Clone + Debug> TermRS<S> {
     pub(crate) fn infer(&self, env: &Environment) -> Result<InferResEither, TypeCheckError<S>> {
-        match self {
-            TermR::Hole(sp) => Err(TypeCheckError::Hole(sp.clone())),
-            TermR::Susp(t, _) => {
+        match &self.0 {
+            TermR::Hole => Err(TypeCheckError::Hole(self.1.clone())),
+            TermR::Susp(t) => {
                 let res = t.infer(env)?;
                 Ok(res.map_either(InferRes::susp, InferRes::susp))
             }
-            TermR::Var(x, sp) => env
+            TermR::Var(x) => env
                 .top_level
                 .get(x)
                 .cloned()
@@ -290,8 +294,8 @@ impl<S: Clone + Debug> TermR<S> {
                         },
                     )
                 })
-                .ok_or(TypeCheckError::UnknownTopLevel(x.clone(), sp.clone())),
-            TermR::Coh(tr, ty, _) => {
+                .ok_or(TypeCheckError::UnknownTopLevel(x.clone(), self.1.clone())),
+            TermR::Coh(tr, ty) => {
                 let (tyt, tyn) = ty.infer(env, &tr.to_map())?;
 
                 if !tyn.support_check(tr, &env.support) {
@@ -304,7 +308,7 @@ impl<S: Clone + Debug> TermR<S> {
                     ty: tyt,
                 }))
             }
-            TermR::Id(_) => Ok(Either::Left(InferRes {
+            TermR::Id => Ok(Either::Left(InferRes {
                 ctx: Tree::singleton(NoDispOption(None)),
                 tm: TermC::Id(0),
                 ty: TypeC::Arr(
@@ -313,7 +317,7 @@ impl<S: Clone + Debug> TermR<S> {
                     TermC::Var(Path::here(0)),
                 ),
             })),
-            t => Err(TypeCheckError::CannotInferCtx(t.clone())),
+            _ => Err(TypeCheckError::CannotInferCtx(self.clone())),
         }
     }
 
@@ -322,28 +326,28 @@ impl<S: Clone + Debug> TermR<S> {
         env: &Environment,
         local: &Local<T>,
     ) -> Result<(TermC<T>, TypeC<T>), TypeCheckError<S>> {
-        match self {
-            TermR::Hole(sp) => Err(TypeCheckError::Hole(sp.clone())),
-            TermR::Var(x, sp) if !local.map.contains_key(x) && !env.top_level.contains_key(x) => {
-                Err(TypeCheckError::UnknownLocal(x.clone(), sp.clone()))
+        match &self.0 {
+            TermR::Hole => Err(TypeCheckError::Hole(self.1.clone())),
+            TermR::Var(x) if !local.map.contains_key(x) && !env.top_level.contains_key(x) => {
+                Err(TypeCheckError::UnknownLocal(x.clone(), self.1.clone()))
             }
-            TermR::Var(x, sp) if local.map.contains_key(x) => local
+            TermR::Var(x) if local.map.contains_key(x) => local
                 .map
                 .get(x)
                 .map(|(p, ty)| (TermC::Var(p.clone()), ty.clone()))
-                .ok_or_else(|| TypeCheckError::UnknownLocal(x.clone(), sp.clone())),
-            t @ TermR::Comp(_) => local.ctx.check_in_tree(t, |tr| {
+                .ok_or_else(|| TypeCheckError::UnknownLocal(x.clone(), self.1.clone())),
+            TermR::Comp => local.ctx.check_in_tree(self, |tr| {
                 Ok((TermC::Comp(tr.clone()), tr.standard_type(tr.dim())))
             }),
-            t @ TermR::Id(sp) => local.ctx.check_in_tree(t, |tr| {
+            TermR::Id => local.ctx.check_in_tree(self, |tr| {
                 if tr.is_disc() {
                     let d = tr.dim();
                     Ok((TermC::Id(d), tr.standard_type(d + 1)))
                 } else {
-                    Err(TypeCheckError::IdNotDisc(sp.clone(), tr.clone()))
+                    Err(TypeCheckError::IdNotDisc(self.1.clone(), tr.clone()))
                 }
             }),
-            TermR::App(head, args, _) => match &args.args {
+            TermR::App(head, args) => match &args.args {
                 ArgsR::Sub(Spanned(sub, sp)) => {
                     let res = head.infer(env)?;
                     match res {
@@ -441,32 +445,36 @@ impl<S: Clone + Debug> TermR<S> {
                     ))
                 }
             },
-            t => local.ctx.check_in_tree(t, |tr| {
-                let res = t.infer(env)?;
+            _ => local.ctx.check_in_tree(self, |tr| {
+                let res = self.infer(env)?;
                 match res {
                     Either::Left(res) => {
                         if &res.ctx != tr {
-                            Err(TypeCheckError::TreeMismatch(t.clone(), res.ctx, tr.clone()))
+                            Err(TypeCheckError::TreeMismatch(
+                                self.clone(),
+                                res.ctx,
+                                tr.clone(),
+                            ))
                         } else {
                             Ok((res.tm, res.ty))
                         }
                     }
-                    Either::Right(_) => Err(TypeCheckError::TermNotTree(t.clone(), tr.clone())),
+                    Either::Right(_) => Err(TypeCheckError::TermNotTree(self.clone(), tr.clone())),
                 }
             }),
         }
     }
 }
 
-impl<S: Clone + Debug> TypeR<S> {
+impl<S: Clone + Debug> TypeRS<S> {
     pub(crate) fn infer<T: Eval>(
         &self,
         env: &Environment,
         local: &Local<T>,
     ) -> Result<(TypeC<T>, TypeN<T>), TypeCheckError<S>> {
-        match self {
-            TypeR::Base(_) => Ok((TypeC::Base, TypeN(vec![]))),
-            TypeR::Arr(s, a, t, sp) => {
+        match &self.0 {
+            TypeR::Base => Ok((TypeC::Base, TypeN(vec![]))),
+            TypeR::Arr(s, a, t) => {
                 let (st, ty1) = s.check(env, local)?;
                 let (tt, ty2) = t.check(env, local)?;
                 let sem_ctx = local.ctx.id_sem_ctx();
@@ -494,7 +502,7 @@ impl<S: Clone + Debug> TypeR<S> {
                             x,
                             t.clone(),
                             y,
-                            sp.clone(),
+                            self.1.clone(),
                         ));
                     }
                     (ty1n.quote(), ty1n)
@@ -503,7 +511,7 @@ impl<S: Clone + Debug> TypeR<S> {
                 tyn.0.push((sn, tn));
                 Ok((TypeC::Arr(st, Box::new(tyt), tt), tyn))
             }
-            ty => Err(TypeCheckError::CannotCheck(ty.clone())),
+            _ => Err(TypeCheckError::CannotCheck(self.clone())),
         }
     }
 
@@ -513,16 +521,16 @@ impl<S: Clone + Debug> TypeR<S> {
         local: &Local<T>,
         ty: &TypeNRef<T>,
     ) -> Result<(), TypeCheckError<S>> {
-        match self {
-            TypeR::Hole(_) => Ok(()),
-            TypeR::Arr(s, a, t, _) => {
+        match &self.0 {
+            TypeR::Hole => Ok(()),
+            TypeR::Arr(s, a, t) => {
                 let (sn, tn) = ty.0.last().ok_or(TypeCheckError::TypeMismatch(
                     self.clone(),
                     ty.quote().to_raw(Some(&local.ctx), env.implicits),
                 ))?;
 
                 let sem_ctx = local.ctx.id_sem_ctx();
-                if !matches!(s, TermR::Hole(_)) {
+                if !matches!(s.0, TermR::Hole) {
                     let (st, _) = s.check(env, local)?;
                     let stn = st.eval(&sem_ctx, env);
                     if &stn != sn {
@@ -531,7 +539,7 @@ impl<S: Clone + Debug> TypeR<S> {
                     }
                 }
 
-                if !matches!(t, TermR::Hole(_)) {
+                if !matches!(t.0, TermR::Hole) {
                     let (tt, _) = t.check(env, local)?;
                     if &tt.eval(&sem_ctx, env) != tn {
                         let x = tn.quote().to_raw(Some(&local.ctx), env.implicits);
@@ -541,7 +549,10 @@ impl<S: Clone + Debug> TypeR<S> {
 
                 if let Some(inner) = a {
                     if ty.0.is_empty() {
-                        return Err(TypeCheckError::TypeMismatch(self.clone(), TypeR::Base(())));
+                        return Err(TypeCheckError::TypeMismatch(
+                            self.clone(),
+                            Spanned(TypeR::Base, ()),
+                        ));
                     }
                     inner.check(env, local, ty.inner())?;
                 }

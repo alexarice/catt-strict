@@ -10,23 +10,25 @@ use crate::common::{Name, NoDispOption, Spanned, ToDoc, Tree};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArgsWithTypeR<S> {
     pub(crate) args: ArgsR<S>,
-    pub(crate) ty: Option<Box<TypeR<S>>>,
+    pub(crate) ty: Option<Box<TypeRS<S>>>,
 }
+
+pub type TermRS<S> = Spanned<TermR<S>, S>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TermR<S> {
-    App(Box<TermR<S>>, ArgsWithTypeR<S>, S),
-    Susp(Box<TermR<S>>, S),
-    Var(Name, S),
-    Coh(Tree<NoDispOption<Name>>, Box<TypeR<S>>, S),
-    Include(Box<TermR<S>>, RangeInclusive<usize>, S),
-    Comp(S),
-    Id(S),
-    Hole(S),
+    App(Box<TermRS<S>>, ArgsWithTypeR<S>),
+    Susp(Box<TermRS<S>>),
+    Var(Name),
+    Coh(Tree<NoDispOption<Name>>, Box<TypeRS<S>>),
+    Include(Box<TermRS<S>>, RangeInclusive<usize>),
+    Comp,
+    Id,
+    Hole,
 }
 
-pub type SubR<S> = Vec<TermR<S>>;
-pub type LabelR<S> = Tree<NoDispOption<TermR<S>>>;
+pub type SubR<S> = Vec<TermRS<S>>;
+pub type LabelR<S> = Tree<NoDispOption<TermRS<S>>>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ArgsR<S> {
@@ -34,46 +36,21 @@ pub enum ArgsR<S> {
     Label(Spanned<LabelR<S>, S>),
 }
 
+pub type TypeRS<S> = Spanned<TypeR<S>, S>;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeR<S> {
-    Base(S),
-    Arr(TermR<S>, Option<Box<TypeR<S>>>, TermR<S>, S),
-    App(Box<TypeR<S>>, ArgsWithTypeR<S>, S),
-    Susp(Box<TypeR<S>>, S),
-    Hole(S),
+    Base,
+    Arr(TermRS<S>, Option<Box<TypeRS<S>>>, TermRS<S>),
+    App(Box<TypeRS<S>>, ArgsWithTypeR<S>),
+    Susp(Box<TypeRS<S>>),
+    Hole,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CtxR<S> {
     Tree(Tree<NoDispOption<Name>>),
-    Other(Vec<(Name, TypeR<S>)>),
-}
-
-impl<S> TermR<S> {
-    pub(crate) fn span(&self) -> &S {
-        match self {
-            TermR::App(_, _, s)
-            | TermR::Susp(_, s)
-            | TermR::Var(_, s)
-            | TermR::Coh(_, _, s)
-            | TermR::Include(_, _, s)
-            | TermR::Comp(s)
-            | TermR::Hole(s)
-            | TermR::Id(s) => s,
-        }
-    }
-}
-
-impl<S> TypeR<S> {
-    pub(crate) fn span(&self) -> &S {
-        match self {
-            TypeR::Base(s)
-            | TypeR::Arr(_, _, _, s)
-            | TypeR::App(_, _, s)
-            | TypeR::Susp(_, s)
-            | TypeR::Hole(s) => s,
-        }
-    }
+    Other(Vec<(Name, TypeRS<S>)>),
 }
 
 impl<S> ToDoc for ArgsWithTypeR<S> {
@@ -99,17 +76,17 @@ impl<S> ToDoc for ArgsWithTypeR<S> {
 impl<S> ToDoc for TermR<S> {
     fn to_doc(&self) -> RcDoc<'_> {
         match self {
-            TermR::App(t, a, _) => {
+            TermR::App(t, a) => {
                 RcDoc::group(t.to_doc().append(RcDoc::line_().append(a.to_doc()).nest(2)))
             }
-            TermR::Susp(t, _) => RcDoc::group(
+            TermR::Susp(t) => RcDoc::group(
                 RcDoc::text("Σ(")
                     .append(RcDoc::line_().append(t.to_doc()).nest(2))
                     .append(RcDoc::line_())
                     .append(")"),
             ),
-            TermR::Var(t, _) => t.to_doc(),
-            TermR::Coh(tr, ty, _) => RcDoc::group(
+            TermR::Var(t) => t.to_doc(),
+            TermR::Coh(tr, ty) => RcDoc::group(
                 RcDoc::text("coh [ ").append(tr.to_doc().nest(6)).append(
                     RcDoc::line()
                         .append(": ")
@@ -118,14 +95,14 @@ impl<S> ToDoc for TermR<S> {
                         .nest(4),
                 ),
             ),
-            TermR::Include(tm, rng, _) => RcDoc::group(
+            TermR::Include(tm, rng) => RcDoc::group(
                 RcDoc::text(format!("inc<{}-{}>(", rng.start(), rng.end()))
                     .append(RcDoc::line_().append(tm.to_doc()).nest(2))
                     .append(RcDoc::line_().append(")")),
             ),
-            TermR::Comp(_) => RcDoc::group(RcDoc::text("comp")),
-            TermR::Hole(_) => RcDoc::group(RcDoc::text("_")),
-            TermR::Id(_) => RcDoc::text("id"),
+            TermR::Comp => RcDoc::group(RcDoc::text("comp")),
+            TermR::Hole => RcDoc::group(RcDoc::text("_")),
+            TermR::Id => RcDoc::text("id"),
         }
     }
 }
@@ -170,8 +147,8 @@ impl<S> Display for ArgsR<S> {
 impl<S> ToDoc for TypeR<S> {
     fn to_doc(&self) -> RcDoc<'_> {
         match self {
-            TypeR::Base(_) => RcDoc::text("*"),
-            TypeR::Arr(s, a, t, _) => {
+            TypeR::Base => RcDoc::text("*"),
+            TypeR::Arr(s, a, t) => {
                 let start = if let Some(x) = a {
                     x.to_doc().append(RcDoc::line()).append("| ")
                 } else {
@@ -188,19 +165,19 @@ impl<S> ToDoc for TypeR<S> {
 
                 RcDoc::group(start.append(end))
             }
-            TypeR::App(t, a, _) => RcDoc::group(
+            TypeR::App(t, a) => RcDoc::group(
                 RcDoc::text("(")
                     .append(t.to_doc())
                     .append(")")
                     .append(RcDoc::line_().append(a.to_doc()).nest(2)),
             ),
-            TypeR::Susp(t, _) => RcDoc::group(
+            TypeR::Susp(t) => RcDoc::group(
                 RcDoc::text("Σ(")
                     .append(RcDoc::line_().append(t.to_doc()).nest(2))
                     .append(RcDoc::line_())
                     .append(")"),
             ),
-            TypeR::Hole(_) => RcDoc::text("_"),
+            TypeR::Hole => RcDoc::text("_"),
         }
     }
 }
@@ -230,7 +207,7 @@ impl<S> Display for CtxR<S> {
 impl<T: ToDoc> Tree<NoDispOption<T>> {
     fn is_max_tree(&self) -> bool {
         !self.branches.is_empty()
-            && self.elements.iter().all(|el| matches!(el.0, None))
+            && self.elements.iter().all(|el| el.0.is_none())
             && self.branches.iter().all(Tree::is_max_tree_inner)
     }
 
