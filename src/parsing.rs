@@ -16,6 +16,13 @@ pub(crate) fn comment() -> impl Parser<char, (), Error = Simple<char>> + Clone {
         .to(())
 }
 
+pub(crate) fn comment_one() -> impl Parser<char, (), Error = Simple<char>> + Clone {
+    whitespace()
+        .separated_by(just("//").ignore_then(newline().not().repeated()))
+        .at_least(1)
+        .to(())
+}
+
 fn tree<O: 'static, P>(
     el: P,
 ) -> impl Parser<char, Tree<NoDispOption<O>>, Error = Simple<char>> + Clone

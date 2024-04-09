@@ -14,7 +14,7 @@ use thiserror::Error;
 
 use crate::{
     common::{Ctx, Environment, InferRes, Name, ToDoc},
-    parsing::{comment, ctx, ident, term, ty},
+    parsing::{comment, comment_one, ctx, ident, term, ty},
     syntax::raw::{CtxR, TermRS, TypeRS},
     typecheck::TypeCheckError,
 };
@@ -127,22 +127,22 @@ pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
             Some((ctx, None)) => Command::DefCtx(id, ctx, tm),
             Some((ctx, Some(ty))) => Command::DefWT(id, ctx, ty, tm),
         })
-        .or(just("normalise ")
-            .ignore_then(ctx().padded_by(comment()))
-            .then(just("|").ignore_then(term().padded_by(comment())))
-            .map(|(ctx, tm)| Command::Normalise(ctx, tm)))
-        .or(just("assert ")
-            .ignore_then(ctx().padded_by(comment()))
-            .then(
-                just("|")
-                    .ignore_then(term().padded_by(comment()))
-                    .then(just("=").ignore_then(term().padded_by(comment()))),
+        .or(just("normalise")
+            .ignore_then(term().padded_by(comment_one()))
+            .then(just("in ").ignore_then(ctx().padded_by(comment())))
+            .map(|(tm, ctx)| Command::Normalise(ctx, tm)))
+        .or(just("assert")
+            .ignore_then(
+                term()
+                    .padded_by(comment_one())
+                    .then(just("=").ignore_then(term().padded_by(comment_one()))),
             )
-            .map(|(ctx, (tm1, tm2))| Command::AssertEq(ctx, tm1, tm2)))
-        .or(just("size ")
-            .ignore_then(ctx().padded_by(comment()))
-            .then(just("|").ignore_then(term().padded_by(comment())))
-            .map(|(ctx, tm)| Command::Size(ctx, tm)))
+            .then(just("in ").ignore_then(ctx().padded_by(comment())))
+            .map(|((tm1, tm2), ctx)| Command::AssertEq(ctx, tm1, tm2)))
+        .or(just("size")
+            .ignore_then(term().padded_by(comment_one()))
+            .then(just("in ").ignore_then(ctx().padded_by(comment())))
+            .map(|(tm, ctx)| Command::Size(ctx, tm)))
         .or(just("import ").ignore_then(
             text::whitespace()
                 .at_least(1)

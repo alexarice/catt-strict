@@ -57,5 +57,5 @@ def eh (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x)) : comp[a,b] -> comp[b,a
 	  , tgt_norm(x,a,b)
           ]
 
-normalise (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x)) | eh(x,a,b)
-size (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x)) | eh(x,a,b)
+normalise eh(x,a,b) in (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x))
+size eh(x,a,b) in (x : *) (a : id(x) -> id(x)) (b : id(x) -> id(x))

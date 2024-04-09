@@ -115,12 +115,12 @@ def syl_coh = coh [ u{x{f{a}g}y}v{s{h{b}k}t}w
                     right(a,b)
                   ]
 
-normalise (x : *) (a : id(id(x)) -> id(id(x))) (b : id(id(x)) -> id(id(x))) | left(a,b)
+normalise left(a,b) in (x : *) (a : id(id(x)) -> id(id(x))) (b : id(id(x)) -> id(id(x)))
 
-normalise (x : *) (a : id(id(x)) -> id(id(x))) (b : id(id(x)) -> id(id(x))) | right(a,b)
+normalise right(a,b) in (x : *) (a : id(id(x)) -> id(id(x))) (b : id(id(x)) -> id(id(x)))
 
 def syllepsis_su (x : *) (a : id(id(x)) -> id(id(x))) (b : id(id(x)) -> id(id(x)))
   : swap(a,b) -> swapinv(b,a)
   = syl_coh(a,b)
 
-size (x : *) (a : id(id(x)) -> id(id(x))) (b : id(id(x)) -> id(id(x))) | syllepsis_su(x,a,b)
+size syllepsis_su(x,a,b) in (x : *) (a : id(id(x)) -> id(id(x))) (b : id(id(x)) -> id(id(x)))

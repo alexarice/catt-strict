@@ -2,7 +2,7 @@
 
 def comp1 [f,g] = comp
 
-normalise [f,g,h] | comp1(comp1(f,g),h)
+normalise comp1(comp1(f,g),h) in [f,g,h]
 
 def horiz [[a],[b]] = comp
 
@@ -18,11 +18,11 @@ def triangle = coh [ x{f}y{g}z
                      horiz(unitor_r(f),id(g))
                    ]
 
-normalise {x{f}y{g}z} | triangle(f,g)
+normalise triangle(f,g) in {x{f}y{g}z}
 
 def pentagon = coh [ v{f}w{g}x{h}y{i}z
     	       	   : comp1(assoc(comp1(f,g),h,i),assoc(f,g,comp1(h,i)))
 		     ->
 		     comp1(horiz(assoc(f,g,h),id(i)), comp1(assoc(f,comp1(g,h),i),horiz(id(f),assoc(g,h,i)))) ]
 
-normalise v{f}w{g}x{h}y{i}z | pentagon(f,g,h,i)
+normalise pentagon(f,g,h,i) in v{f}w{g}x{h}y{i}z
