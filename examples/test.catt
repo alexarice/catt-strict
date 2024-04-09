@@ -16,4 +16,4 @@ def test3 x{f}y = p0 <x{f}y>
 
 normalise test3(* | x -> x, f) in (x : *) (f : id(x) -> id(x))
 
-def error_test x{f}y = comp <x{f}x>
+def error_test x{f}y = comp ⟨x{f}x⟩
