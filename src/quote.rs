@@ -9,9 +9,9 @@ use crate::{
 impl HeadN {
     pub(crate) fn quote(&self) -> TermC<Path> {
         match self {
-            HeadN::CohN { tree, ty } => TermC::Coh(tree.clone(), Box::new(ty.quote())),
-            HeadN::CompN { tree } => TermC::Comp(tree.clone()),
-            HeadN::IdN { dim } => TermC::Id(*dim),
+            HeadN::Coh { tree, ty } => TermC::Coh(tree.clone(), Box::new(ty.quote())),
+            HeadN::Comp { tree } => TermC::Comp(tree.clone()),
+            HeadN::Id { dim } => TermC::Id(*dim),
         }
     }
 }

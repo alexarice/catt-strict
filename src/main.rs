@@ -7,7 +7,7 @@ use std::{
 use ariadne::{Cache, Color, Fmt, Report, ReportKind, Source};
 use catt_strict::{
     command::{command, Command, Src},
-    common::{Environment, Insertion, Reduction, Support},
+    common::{Insertion, Reduction, Signature, Support},
 };
 use chumsky::prelude::*;
 use rustyline::{
@@ -68,7 +68,7 @@ impl Cache<Src> for MyCache {
 fn main() {
     let args: Args = clap::Parser::parse();
 
-    let mut env = Environment {
+    let mut env = Signature {
         top_level: HashMap::new(),
         reduction: Reduction {
             disc_rem: args.su || args.sua,

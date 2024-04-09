@@ -13,7 +13,7 @@ use pretty::RcDoc;
 use thiserror::Error;
 
 use crate::{
-    common::{Ctx, Environment, InferRes, Name, ToDoc},
+    common::{Ctx, InferRes, Name, Signature, ToDoc},
     parsing::{comment, comment_one, ctx, ident, term, ty},
     syntax::raw::{CtxR, TermRS, TypeRS},
     typecheck::TypeCheckError,
@@ -159,7 +159,7 @@ pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
 }
 
 impl Command {
-    pub fn run(self, env: &mut Environment, file: Option<&PathBuf>) -> Result<(), CattError<Src>> {
+    pub fn run(self, env: &mut Signature, file: Option<&PathBuf>) -> Result<(), CattError<Src>> {
         println!("----------------------------------------");
 
         macro_rules! printtmty {

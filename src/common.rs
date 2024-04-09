@@ -6,7 +6,7 @@ use itertools::Itertools;
 use pretty::RcDoc;
 
 use crate::{
-    eval::SemCtx,
+    eval::Env,
     syntax::{
         core::{ArgsC, TermC, TypeC},
         normal::TermN,
@@ -337,7 +337,7 @@ pub trait Ctx<P: Position> {
 
     fn get_name(&self, pos: &P) -> Option<Name>;
 
-    fn id_sem_ctx(&self) -> SemCtx<P, P>;
+    fn id_sem_ctx(&self) -> Env<P, P>;
 
     fn check_in_tree<F, S>(
         &self,
@@ -359,16 +359,16 @@ pub trait Position: Clone + PartialEq + Eq {
 }
 
 pub trait Eval: Position {
-    fn eval<T: Clone>(tm: &TermC<Self>, ctx: &SemCtx<Self, T>, env: &Environment) -> TermN<T>;
+    fn eval<T: Clone>(tm: &TermC<Self>, ctx: &Env<Self, T>, env: &Signature) -> TermN<T>;
 
     fn eval_args<T: Eval, U: Clone>(
         args: &ArgsC<Self, T>,
         ty: &TypeC<T>,
-        ctx: &SemCtx<T, U>,
-        env: &Environment,
-    ) -> SemCtx<Self, U>;
+        ctx: &Env<T, U>,
+        env: &Signature,
+    ) -> Env<Self, U>;
 
-    fn restrict<T: Clone>(ctx: SemCtx<Self, T>) -> SemCtx<Self, T>;
+    fn restrict<T: Clone>(ctx: Env<Self, T>) -> Env<Self, T>;
 }
 
 pub type Level = usize;
@@ -394,8 +394,8 @@ impl Ctx<Level> for Vec<(Option<Name>, TypeC<Level>)> {
         self.get(*pos).and_then(|x| x.0.clone())
     }
 
-    fn id_sem_ctx(&self) -> SemCtx<usize, usize> {
-        SemCtx::id_vec(self.len())
+    fn id_sem_ctx(&self) -> Env<usize, usize> {
+        Env::id_vec(self.len())
     }
 
     fn check_in_tree<F, S>(
@@ -438,8 +438,8 @@ impl Ctx<Path> for Tree<NoDispOption<Name>> {
         self.lookup(pos).and_then(|x| x.0.clone())
     }
 
-    fn id_sem_ctx(&self) -> SemCtx<Path, Path> {
-        SemCtx::id_tree(self)
+    fn id_sem_ctx(&self) -> Env<Path, Path> {
+        Env::id_tree(self)
     }
 
     fn check_in_tree<F, S>(
@@ -566,7 +566,7 @@ impl<T: Position> InferRes<T> {
 
 pub type InferResEither = Either<InferRes<Path>, InferRes<Level>>;
 
-pub struct Environment {
+pub struct Signature {
     pub top_level: HashMap<Name, InferResEither>,
     pub reduction: Reduction,
     pub support: Support,

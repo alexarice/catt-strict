@@ -8,14 +8,14 @@ use crate::common::{Name, NoDispOption, Path, Support, Tree};
 #[derive(Clone, Debug, Eq, Derivative)]
 #[derivative(PartialEq)]
 pub enum HeadN {
-    CohN {
+    Coh {
         tree: Tree<NoDispOption<Name>>,
         ty: TypeN<Path>,
     },
-    CompN {
+    Comp {
         tree: Tree<NoDispOption<Name>>,
     },
-    IdN {
+    Id {
         dim: usize,
     },
 }
@@ -44,9 +44,9 @@ impl<P> Deref for TypeN<P> {
 impl HeadN {
     pub(crate) fn size(&self) -> usize {
         match self {
-            HeadN::CohN { ty, .. } => 1 + ty.size(),
-            HeadN::CompN { .. } => 1,
-            HeadN::IdN { .. } => 1,
+            HeadN::Coh { ty, .. } => 1 + ty.size(),
+            HeadN::Comp { .. } => 1,
+            HeadN::Id { .. } => 1,
         }
     }
 }
@@ -164,7 +164,7 @@ impl TypeN<Path> {
             let src = path_tree.bdry(dim - 1, false);
             let src_correct = if let Some(x) = src.get_max() {
                 s == x
-            } else if let TermN::Other(HeadN::CompN { .. }, args) = s {
+            } else if let TermN::Other(HeadN::Comp { .. }, args) = s {
                 args == &src
             } else {
                 false
@@ -175,7 +175,7 @@ impl TypeN<Path> {
             let tgt = path_tree.bdry(dim - 1, true);
             let tgt_correct = if let Some(x) = tgt.get_max() {
                 t == x
-            } else if let TermN::Other(HeadN::CompN { .. }, args) = t {
+            } else if let TermN::Other(HeadN::Comp { .. }, args) = t {
                 args == &tgt
             } else {
                 false

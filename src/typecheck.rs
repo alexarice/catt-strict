@@ -6,8 +6,8 @@ use thiserror::Error;
 
 use crate::{
     common::{
-        Ctx, Environment, Eval, InferRes, InferResEither, Level, Name, NoDispOption, Path,
-        Position, Spanned, Tree,
+        Ctx, Eval, InferRes, InferResEither, Level, Name, NoDispOption, Path, Position, Signature,
+        Spanned, Tree,
     },
     syntax::{
         core::{ArgsC, ArgsWithTypeC, TermC, TypeC},
@@ -269,7 +269,7 @@ impl TypeCheckError<Range<usize>> {
 }
 
 impl<S: Clone + Debug> TermRS<S> {
-    pub(crate) fn infer(&self, env: &Environment) -> Result<InferResEither, TypeCheckError<S>> {
+    pub(crate) fn infer(&self, env: &Signature) -> Result<InferResEither, TypeCheckError<S>> {
         match &self.0 {
             TermR::Hole => Err(TypeCheckError::Hole(self.1.clone())),
             TermR::Susp(t) => {
@@ -323,7 +323,7 @@ impl<S: Clone + Debug> TermRS<S> {
 
     pub(crate) fn check<T: Eval>(
         &self,
-        env: &Environment,
+        env: &Signature,
         local: &Local<T>,
     ) -> Result<(TermC<T>, TypeC<T>), TypeCheckError<S>> {
         match &self.0 {
@@ -469,7 +469,7 @@ impl<S: Clone + Debug> TermRS<S> {
 impl<S: Clone + Debug> TypeRS<S> {
     pub(crate) fn infer<T: Eval>(
         &self,
-        env: &Environment,
+        env: &Signature,
         local: &Local<T>,
     ) -> Result<(TypeC<T>, TypeN<T>), TypeCheckError<S>> {
         match &self.0 {
@@ -517,7 +517,7 @@ impl<S: Clone + Debug> TypeRS<S> {
 
     pub(crate) fn check<T: Eval>(
         &self,
-        env: &Environment,
+        env: &Signature,
         local: &Local<T>,
         ty: &TypeNRef<T>,
     ) -> Result<(), TypeCheckError<S>> {
@@ -591,7 +591,7 @@ impl<S: Clone + Debug> LabelR<S> {
     #[allow(clippy::type_complexity)]
     pub(crate) fn infer<T: Eval>(
         &self,
-        env: &Environment,
+        env: &Signature,
         local: &Local<T>,
         sp: &S,
     ) -> Result<(ArgsC<Path, T>, TypeN<T>), TypeCheckError<S>> {
@@ -660,7 +660,7 @@ impl<S: Clone + Debug> LabelR<S> {
 impl<S: Clone + Debug> CtxR<S> {
     pub(crate) fn check(
         &self,
-        env: &Environment,
+        env: &Signature,
     ) -> Result<Either<Local<Path>, Local<Level>>, TypeCheckError<S>> {
         match self {
             CtxR::Tree(tr) => Ok(Either::Left(tr.to_map())),
