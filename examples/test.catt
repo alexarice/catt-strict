@@ -12,7 +12,7 @@ def test2 x{f}y = p0 [f]
 
 normalise test2(f) in (x : *) (f : x -> x)
 
-def test3 x{f}y = p0 <x{f}y>
+def test3 x{f}y = p0 ⟨x{f}y⟩
 
 normalise test3(* | x -> x, f) in (x : *) (f : id(x) -> id(x))
 
