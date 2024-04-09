@@ -11,42 +11,42 @@ use crate::{
 
 #[derive(Clone, Debug, Derivative)]
 #[derivative(PartialEq, Eq)]
-pub enum TermC<T: Clone> {
-    AppSub(Box<TermC<Level>>, ArgsWithTypeC<Level, T>),
-    AppLabel(Box<TermC<Path>>, ArgsWithTypeC<Path, T>),
-    Var(T),
-    TopLvl(Name, Box<TermC<T>>),
-    Susp(Box<TermC<T>>),
+pub enum TermC<P: Clone> {
+    AppSub(Box<TermC<Level>>, ArgsWithTypeC<Level, P>),
+    AppLabel(Box<TermC<Path>>, ArgsWithTypeC<Path, P>),
+    Var(P),
+    TopLvl(Name, Box<TermC<P>>),
+    Susp(Box<TermC<P>>),
     Coh(Tree<NoDispOption<Name>>, Box<TypeC<Path>>),
-    Include(Box<TermC<T>>, RangeInclusive<usize>),
+    Include(Box<TermC<P>>, RangeInclusive<usize>),
     Comp(Tree<NoDispOption<Name>>),
     Id(usize),
 }
 
-pub type ArgsC<S, T> = <S as Position>::Container<TermC<T>>;
+pub type ArgsC<P, Q> = <P as Position>::Container<TermC<Q>>;
 
 #[derive(Derivative, Clone)]
 #[derivative(
-    Debug(bound = "T: std::fmt::Debug, ArgsC<S,T>: std::fmt::Debug"),
-    PartialEq(bound = "T: PartialEq, ArgsC<S,T>: PartialEq"),
-    Eq(bound = "T: Eq, ArgsC<S,T>: Eq")
+    Debug(bound = "Q: std::fmt::Debug, ArgsC<P,Q>: std::fmt::Debug"),
+    PartialEq(bound = "Q: PartialEq, ArgsC<P,Q>: PartialEq"),
+    Eq(bound = "Q: Eq, ArgsC<P,Q>: Eq")
 )]
-pub struct ArgsWithTypeC<S: Position, T: Clone> {
-    pub(crate) args: ArgsC<S, T>,
-    pub(crate) ty: Box<TypeC<T>>,
+pub struct ArgsWithTypeC<P: Position, Q: Clone> {
+    pub(crate) args: ArgsC<P, Q>,
+    pub(crate) ty: Box<TypeC<Q>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TypeC<T: Clone> {
+pub enum TypeC<P: Clone> {
     Base,
-    Arr(TermC<T>, Box<TypeC<T>>, TermC<T>),
-    AppLvl(Box<TypeC<Level>>, ArgsWithTypeC<Level, T>),
-    AppPath(Box<TypeC<Path>>, ArgsWithTypeC<Path, T>),
-    Susp(Box<TypeC<T>>),
+    Arr(TermC<P>, Box<TypeC<P>>, TermC<P>),
+    AppLvl(Box<TypeC<Level>>, ArgsWithTypeC<Level, P>),
+    AppPath(Box<TypeC<Path>>, ArgsWithTypeC<Path, P>),
+    Susp(Box<TypeC<P>>),
 }
 
-impl<T: Position> TermC<T> {
-    pub(crate) fn to_raw(&self, ctx: Option<&T::Ctx>, with_ict: bool) -> TermRS<()> {
+impl<P: Position> TermC<P> {
+    pub(crate) fn to_raw(&self, ctx: Option<&P::Ctx>, with_ict: bool) -> TermRS<()> {
         let tm = match self {
             TermC::AppSub(tm, args) => TermR::App(
                 Box::new(tm.to_raw(None, with_ict)),
@@ -72,8 +72,8 @@ impl<T: Position> TermC<T> {
     }
 }
 
-impl<S: Position, T: Position> ArgsWithTypeC<S, T> {
-    pub(crate) fn to_raw(&self, ctx: Option<&T::Ctx>, with_ict: bool) -> ArgsWithTypeR<()> {
+impl<P: Position, Q: Position> ArgsWithTypeC<P, Q> {
+    pub(crate) fn to_raw(&self, ctx: Option<&Q::Ctx>, with_ict: bool) -> ArgsWithTypeR<()> {
         let args = match self.args.to_tree_or_vec() {
             Either::Right(s) => ArgsR::Sub(s.iter().map(|tm| tm.to_raw(ctx, with_ict)).collect()),
             Either::Left(l) => ArgsR::Label(if !with_ict {
@@ -97,8 +97,8 @@ impl<S: Position, T: Position> ArgsWithTypeC<S, T> {
     }
 }
 
-impl<T: Position> TypeC<T> {
-    pub(crate) fn to_raw(&self, ctx: Option<&T::Ctx>, with_ict: bool) -> TypeRS<()> {
+impl<P: Position> TypeC<P> {
+    pub(crate) fn to_raw(&self, ctx: Option<&P::Ctx>, with_ict: bool) -> TypeRS<()> {
         let ty = match self {
             TypeC::Base => TypeR::Base,
             TypeC::Arr(s, a, t) => TypeR::Arr(

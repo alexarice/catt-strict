@@ -21,20 +21,20 @@ pub enum HeadN {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TermN<T> {
-    Variable(T),
-    Other(HeadN, Tree<TermN<T>>),
+pub enum TermN<P> {
+    Variable(P),
+    Other(HeadN, Tree<TermN<P>>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TypeN<T>(pub(crate) Vec<(TermN<T>, TermN<T>)>);
+pub struct TypeN<P>(pub(crate) Vec<(TermN<P>, TermN<P>)>);
 
 #[derive(Debug, PartialEq, Eq, RefCast)]
 #[repr(transparent)]
-pub struct TypeNRef<T>(pub(crate) [(TermN<T>, TermN<T>)]);
+pub struct TypeNRef<P>(pub(crate) [(TermN<P>, TermN<P>)]);
 
-impl<T> Deref for TypeN<T> {
-    type Target = TypeNRef<T>;
+impl<P> Deref for TypeN<P> {
+    type Target = TypeNRef<P>;
 
     fn deref(&self) -> &Self::Target {
         TypeNRef::ref_cast(&self.0)
@@ -51,8 +51,8 @@ impl HeadN {
     }
 }
 
-impl<T> TermN<T> {
-    pub(crate) fn into_args(self, ty: TypeN<T>) -> Tree<TermN<T>> {
+impl<P> TermN<P> {
+    pub(crate) fn into_args(self, ty: TypeN<P>) -> Tree<TermN<P>> {
         ty.0.into_iter()
             .rfold(Tree::singleton(self), |tr, (s, t)| Tree {
                 elements: vec![s, t],
@@ -89,8 +89,8 @@ impl TermN<Path> {
     }
 }
 
-impl<T> TypeN<T> {
-    pub(crate) fn base() -> TypeN<T> {
+impl<P> TypeN<P> {
+    pub(crate) fn base() -> TypeN<P> {
         TypeN(vec![])
     }
 
@@ -187,7 +187,7 @@ impl TypeN<Path> {
     }
 }
 
-impl<T> TypeNRef<T> {
+impl<P> TypeNRef<P> {
     pub(crate) fn inner(&self) -> &Self {
         TypeNRef::ref_cast(&self.0[0..self.0.len() - 1])
     }
