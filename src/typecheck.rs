@@ -353,7 +353,7 @@ impl<S: Clone + Debug> TermRS<S> {
                     match res {
                         Either::Left(InferRes { ctx, tm, ty }) => {
                             let label = LabelR::from_sub(sub, &args.ty, &ctx, &args.sp)?;
-                            let (l, lty) = label.infer(env, local, &args.sp)?;
+                            let (l, lty) = label.check(env, local, &args.sp)?;
 
                             if let Some(t) = &args.ty {
                                 t.check(env, local, &lty)?;
@@ -370,45 +370,16 @@ impl<S: Clone + Debug> TermRS<S> {
                             ))
                         }
                         Either::Right(InferRes { ctx, tm, ty }) => {
-                            if sub.len() != ctx.len() {
-                                return Err(TypeCheckError::WrongArgs(
-                                    *head.clone(),
-                                    ctx.len(),
-                                    args.sp.clone(),
-                                    sub.len(),
-                                ));
-                            }
-                            let (subt, tys): (Vec<TermC<T>>, Vec<_>) = sub
-                                .iter()
-                                .map(|t| Ok((t.check(env, local)?, t)))
-                                .collect::<Result<Vec<_>, _>>()?
-                                .into_iter()
-                                .map(|((tt, ty), tm)| (tt, (ty, tm)))
-                                .unzip();
-                            let awt = ArgsWithTypeC {
-                                args: subt,
-                                ty: Box::new(tys[0].0.clone()),
-                            };
+			    if sub.len() != ctx.len() {
+				return Err(TypeCheckError::WrongArgs(
+				    *head.clone(),
+				    ctx.len(),
+				    args.sp.clone(),
+				    sub.len(),
+				));
+			    }
 
-                            let sem_ctx = local.ctx.id_env();
-
-                            let args_sem_ctx = awt.eval(&sem_ctx, env);
-
-                            for (x, (y, tm)) in ctx.iter().map(|x| &x.1).zip(tys) {
-                                let xn = x.eval(&args_sem_ctx, env);
-                                let yn = y.eval(&sem_ctx, env);
-                                if xn != yn {
-                                    let xe = xn.quote().to_raw(Some(&local.ctx), env.implicits);
-                                    let ye = yn.quote().to_raw(Some(&local.ctx), env.implicits);
-                                    return Err(TypeCheckError::InferredTypeWrongCalc(
-                                        tm.clone(),
-                                        ye,
-                                        xe,
-                                    ));
-                                }
-                            }
-
-                            let tyn = awt.ty.eval(&sem_ctx, env);
+			    let (awt, tyn) = check_sub(sub, env, local, &ctx)?;
 
                             if let Some(t) = &args.ty {
                                 t.check(env, local, &tyn)?;
@@ -428,7 +399,7 @@ impl<S: Clone + Debug> TermRS<S> {
                             .map(&|p| NoDispOption(Some(p.to_name())))
                             .to_map(),
                     )?;
-                    let (lt, tyn) = l.infer(env, local, &args.sp)?;
+                    let (lt, tyn) = l.check(env, local, &args.sp)?;
 
                     let awt = ArgsWithTypeC {
                         args: lt,
@@ -478,9 +449,7 @@ impl<S: Clone + Debug> TypeRS<S> {
                 let (st, ty1) = s.check(env, local)?;
                 let (tt, ty2) = t.check(env, local)?;
                 let sem_ctx = local.ctx.id_env();
-                let sn = st.eval(&sem_ctx, env);
                 let ty1n = ty1.eval(&sem_ctx, env);
-                let tn = tt.eval(&sem_ctx, env);
                 let ty2n = ty2.eval(&sem_ctx, env);
                 let (tyt, mut tyn) = if let Some(ty) = a {
                     let (tyt, tyn) = ty.infer(env, local)?;
@@ -507,7 +476,8 @@ impl<S: Clone + Debug> TypeRS<S> {
                     }
                     (ty1n.quote(), ty1n)
                 };
-
+		let sn = st.eval(&sem_ctx, env);
+		let tn = tt.eval(&sem_ctx, env);
                 tyn.0.push((sn, tn));
                 Ok((TypeC::Arr(st, Box::new(tyt), tt), tyn))
             }
@@ -571,6 +541,45 @@ impl<S: Clone + Debug> TypeRS<S> {
     }
 }
 
+pub (crate) fn check_sub<S: Clone + Debug, T: Eval>(
+    sub : &SubR<S>,
+    env : &Signature,
+    local : &Local<T>,
+    ctx: &Vec<(Option<Name>, TypeC<usize>)>,
+) -> Result<(ArgsWithTypeC<usize, T>, TypeN<T>), TypeCheckError<S>> {
+    let (subt, tys): (Vec<TermC<T>>, Vec<_>) = sub
+        .iter()
+        .map(|t| Ok((t.check(env, local)?, t)))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .map(|((tt, ty), tm)| (tt, (ty, tm)))
+        .unzip();
+    let awt = ArgsWithTypeC {
+        args: subt,
+        ty: Box::new(tys[0].0.clone()),
+    };
+
+    let sem_ctx = local.ctx.id_env();
+
+    let args_sem_ctx = awt.eval(&sem_ctx, env);
+
+    for (x, (y, tm)) in ctx.iter().map(|x| &x.1).zip(tys) {
+        let xn = x.eval(&args_sem_ctx, env);
+        let yn = y.eval(&sem_ctx, env);
+        if xn != yn {
+            let xe = xn.quote().to_raw(Some(&local.ctx), env.implicits);
+            let ye = yn.quote().to_raw(Some(&local.ctx), env.implicits);
+            return Err(TypeCheckError::InferredTypeWrongCalc(
+                tm.clone(),
+                ye,
+                xe,
+            ));
+        }
+    }
+
+    Ok((awt, args_sem_ctx.get_ty()))
+}
+
 impl<S: Clone + Debug> LabelR<S> {
     fn from_sub<T>(
         sub: &SubR<S>,
@@ -589,7 +598,7 @@ impl<S: Clone + Debug> LabelR<S> {
     }
 
     #[allow(clippy::type_complexity)]
-    pub(crate) fn infer<T: Eval>(
+    pub(crate) fn check<T: Eval>(
         &self,
         env: &Signature,
         local: &Local<T>,
@@ -609,7 +618,7 @@ impl<S: Clone + Debug> LabelR<S> {
         let mut el_norm = vec![];
         let mut ty = None;
         for br in &self.branches {
-            let (l, mut ty1) = br.infer(env, local, sp)?;
+            let (l, mut ty1) = br.check(env, local, sp)?;
             branches.push(l);
 
             let (s, t) = ty1
