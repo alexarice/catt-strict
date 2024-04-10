@@ -235,7 +235,7 @@ impl Command {
                 macro_rules! check {
                     ($l: expr, $p: ident) => {
                         let (tmt, tyt) = tm.check(env, &$l)?;
-                        ty.check(env, &$l, &tyt.eval(&$l.ctx.id_sem_ctx(), env))?;
+                        ty.check(env, &$l, &tyt.eval(&$l.ctx.id_env(), env))?;
                         println!(
                             "{} {}",
                             "Checked".fg(Color::Blue),
@@ -268,7 +268,7 @@ impl Command {
                 macro_rules! normalise {
                     ($l:expr) => {
                         let (tmt, tyt) = tm.check(env, &$l)?;
-                        let sem_ctx = $l.ctx.id_sem_ctx();
+                        let sem_ctx = $l.ctx.id_env();
                         let tmn = tmt.eval(&sem_ctx, env);
                         let tyn = tyt.eval(&sem_ctx, env);
                         println!(
@@ -317,7 +317,7 @@ impl Command {
                 macro_rules! get_size {
                     ($l:expr) => {
                         let (tmt, _) = tm.check(env, &$l)?;
-                        let sem_ctx = $l.ctx.id_sem_ctx();
+                        let sem_ctx = $l.ctx.id_env();
                         let tmn = tmt.eval(&sem_ctx, env);
                         println!(
                             "{}",
@@ -353,7 +353,7 @@ impl Command {
                 let local = ctx.check(env)?;
                 macro_rules! check_eq {
                     ($l:expr) => {
-                        let sem_ctx = $l.ctx.id_sem_ctx();
+                        let sem_ctx = $l.ctx.id_env();
                         let (tmt1, tyt1) = tm1.check(env, &$l)?;
                         let tmn1 = tmt1.eval(&sem_ctx, env);
                         let tyn1 = tyt1.eval(&sem_ctx, env);

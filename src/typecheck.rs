@@ -390,7 +390,7 @@ impl<S: Clone + Debug> TermRS<S> {
                                 ty: Box::new(tys[0].0.clone()),
                             };
 
-                            let sem_ctx = local.ctx.id_sem_ctx();
+                            let sem_ctx = local.ctx.id_env();
 
                             let args_sem_ctx = awt.eval(&sem_ctx, env);
 
@@ -477,7 +477,7 @@ impl<S: Clone + Debug> TypeRS<S> {
             TypeR::Arr(s, a, t) => {
                 let (st, ty1) = s.check(env, local)?;
                 let (tt, ty2) = t.check(env, local)?;
-                let sem_ctx = local.ctx.id_sem_ctx();
+                let sem_ctx = local.ctx.id_env();
                 let sn = st.eval(&sem_ctx, env);
                 let ty1n = ty1.eval(&sem_ctx, env);
                 let tn = tt.eval(&sem_ctx, env);
@@ -529,7 +529,7 @@ impl<S: Clone + Debug> TypeRS<S> {
                     ty.quote().to_raw(Some(&local.ctx), env.implicits),
                 ))?;
 
-                let sem_ctx = local.ctx.id_sem_ctx();
+                let sem_ctx = local.ctx.id_env();
                 if !matches!(s.0, TermR::Hole) {
                     let (st, _) = s.check(env, local)?;
                     let stn = st.eval(&sem_ctx, env);
@@ -603,7 +603,7 @@ impl<S: Clone + Debug> LabelR<S> {
 
             let (tm, ty) = term.check(env, local)?;
 
-            return Ok((Tree::singleton(tm), ty.eval(&local.ctx.id_sem_ctx(), env)));
+            return Ok((Tree::singleton(tm), ty.eval(&local.ctx.id_env(), env)));
         }
         let mut branches = vec![];
         let mut el_norm = vec![];
@@ -641,7 +641,7 @@ impl<S: Clone + Debug> LabelR<S> {
             .map(|(el, eln)| match &el.0 {
                 Some(tm) => {
                     let tmt = tm.check(env, local)?.0;
-                    let tmn = tmt.eval(&local.ctx.id_sem_ctx(), env);
+                    let tmn = tmt.eval(&local.ctx.id_env(), env);
                     if tmn != eln {
                         let x = eln.quote().to_raw(Some(&local.ctx), env.implicits);
                         Err(TypeCheckError::TermMismatch(tm.clone(), x))

@@ -337,7 +337,7 @@ pub trait Ctx<P: Position> {
 
     fn get_name(&self, pos: &P) -> Option<Name>;
 
-    fn id_sem_ctx(&self) -> Env<P, P>;
+    fn id_env(&self) -> Env<P, P>;
 
     fn check_in_tree<F, S>(
         &self,
@@ -394,7 +394,7 @@ impl Ctx<Level> for Vec<(Option<Name>, TypeC<Level>)> {
         self.get(*pos).and_then(|x| x.0.clone())
     }
 
-    fn id_sem_ctx(&self) -> Env<usize, usize> {
+    fn id_env(&self) -> Env<usize, usize> {
         Env::id_vec(self.len())
     }
 
@@ -438,7 +438,7 @@ impl Ctx<Path> for Tree<NoDispOption<Name>> {
         self.lookup(pos).and_then(|x| x.0.clone())
     }
 
-    fn id_sem_ctx(&self) -> Env<Path, Path> {
+    fn id_env(&self) -> Env<Path, Path> {
         Env::id_tree(self)
     }
 
