@@ -6,6 +6,8 @@ normalise comp1(comp1(f,g),h) in [f,g,h]
 
 def horiz [[a],[b]] = comp
 
+def vert [[a,b]] = comp1(a,b)
+
 def unitor_l = coh [ x{f}y : comp1(id(x),f) -> f ]
 
 def unitor_r = coh [ x{f}y : comp1(f, id(y)) -> f ]
