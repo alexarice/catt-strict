@@ -541,11 +541,12 @@ impl<S: Clone + Debug> TypeRS<S> {
     }
 }
 
+#[allow(clippy::type_complexity)]
 pub(crate) fn check_sub<S: Clone + Debug, T: Eval>(
     sub: &SubR<S>,
     env: &Signature,
     local: &Local<T>,
-    ctx: &Vec<(Option<Name>, TypeC<usize>)>,
+    ctx: &[(Option<Name>, TypeC<usize>)],
 ) -> Result<(ArgsWithTypeC<usize, T>, TypeN<T>), TypeCheckError<S>> {
     let (subt, tys): (Vec<TermC<T>>, Vec<_>) = sub
         .iter()
