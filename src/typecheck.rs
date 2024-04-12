@@ -370,16 +370,16 @@ impl<S: Clone + Debug> TermRS<S> {
                             ))
                         }
                         Either::Right(InferRes { ctx, tm, ty }) => {
-			    if sub.len() != ctx.len() {
-				return Err(TypeCheckError::WrongArgs(
-				    *head.clone(),
-				    ctx.len(),
-				    args.sp.clone(),
-				    sub.len(),
-				));
-			    }
+                            if sub.len() != ctx.len() {
+                                return Err(TypeCheckError::WrongArgs(
+                                    *head.clone(),
+                                    ctx.len(),
+                                    args.sp.clone(),
+                                    sub.len(),
+                                ));
+                            }
 
-			    let (awt, tyn) = check_sub(sub, env, local, &ctx)?;
+                            let (awt, tyn) = check_sub(sub, env, local, &ctx)?;
 
                             if let Some(t) = &args.ty {
                                 t.check(env, local, &tyn)?;
@@ -476,8 +476,8 @@ impl<S: Clone + Debug> TypeRS<S> {
                     }
                     (ty1n.quote(), ty1n)
                 };
-		let sn = st.eval(&sem_ctx, env);
-		let tn = tt.eval(&sem_ctx, env);
+                let sn = st.eval(&sem_ctx, env);
+                let tn = tt.eval(&sem_ctx, env);
                 tyn.0.push((sn, tn));
                 Ok((TypeC::Arr(st, Box::new(tyt), tt), tyn))
             }
@@ -541,10 +541,10 @@ impl<S: Clone + Debug> TypeRS<S> {
     }
 }
 
-pub (crate) fn check_sub<S: Clone + Debug, T: Eval>(
-    sub : &SubR<S>,
-    env : &Signature,
-    local : &Local<T>,
+pub(crate) fn check_sub<S: Clone + Debug, T: Eval>(
+    sub: &SubR<S>,
+    env: &Signature,
+    local: &Local<T>,
     ctx: &Vec<(Option<Name>, TypeC<usize>)>,
 ) -> Result<(ArgsWithTypeC<usize, T>, TypeN<T>), TypeCheckError<S>> {
     let (subt, tys): (Vec<TermC<T>>, Vec<_>) = sub
@@ -569,11 +569,7 @@ pub (crate) fn check_sub<S: Clone + Debug, T: Eval>(
         if xn != yn {
             let xe = xn.quote().to_raw(Some(&local.ctx), env.implicits);
             let ye = yn.quote().to_raw(Some(&local.ctx), env.implicits);
-            return Err(TypeCheckError::InferredTypeWrongCalc(
-                tm.clone(),
-                ye,
-                xe,
-            ));
+            return Err(TypeCheckError::InferredTypeWrongCalc(tm.clone(), ye, xe));
         }
     }
 
