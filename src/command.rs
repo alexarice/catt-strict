@@ -312,7 +312,7 @@ impl Command {
                 }
             }
             Command::Size(ctx, tm) => {
-                println!("{} {tm}", "Normalising".fg(Color::Green));
+                println!("{} {tm}", "Calculating size of".fg(Color::Green));
                 let local = ctx.check(env)?;
                 macro_rules! get_size {
                     ($l:expr) => {

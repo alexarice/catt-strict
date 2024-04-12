@@ -29,27 +29,40 @@ fn tree<O: 'static, P>(
 where
     P: Parser<char, O, Error = Simple<char>> + Clone + 'static,
 {
-    recursive(|tr| {
-        el.clone()
-            .or_not()
-            .padded_by(comment())
-            .map(NoDispOption)
+    let el_pad = el.clone().or_not().padded_by(comment()).map(NoDispOption);
+    let inner = recursive(|tr| {
+        el_pad
+            .clone()
             .map(Tree::singleton)
             .then(
                 tr.delimited_by(just("{"), just("}"))
-                    .then(el.clone().or_not().padded_by(comment()).map(NoDispOption))
-                    .repeated()
-                    .at_least(1),
+                    .then(el_pad.clone())
+                    .repeated(),
             )
             .foldl(|mut tree, (br, el)| {
                 tree.elements.push(el);
                 tree.branches.push(br);
                 tree
             })
-            .or(el
-                .padded_by(comment())
-                .map(|el| Tree::singleton(NoDispOption(Some(el)))))
-    })
+    });
+    el_pad
+        .clone()
+	.map(Tree::singleton)
+        .then(
+            inner
+                .delimited_by(just("{"), just("}"))
+                .then(el_pad)
+                .repeated()
+                .at_least(1),
+        )
+        .foldl(|mut tree, (br, el)| {
+            tree.elements.push(el);
+            tree.branches.push(br);
+            tree
+        })
+        .or(el
+            .padded_by(comment())
+            .map(|el| Tree::singleton(NoDispOption(Some(el)))))
 }
 
 fn tree_max<O: 'static, P>(
