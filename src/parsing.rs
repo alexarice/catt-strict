@@ -47,7 +47,7 @@ where
     });
     el_pad
         .clone()
-	.map(Tree::singleton)
+        .map(Tree::singleton)
         .then(
             inner
                 .delimited_by(just("{"), just("}"))
