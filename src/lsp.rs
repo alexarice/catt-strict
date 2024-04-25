@@ -85,13 +85,10 @@ impl Backend {
     async fn on_change(&self, uri: Url, text: String) {
         let rope = Rope::from_str(&text);
         if let Ok(import_file) = uri.to_file_path() {
-            match run_import(&import_file, &mut self.env.clone(), text) {
-                Err(e) => {
-                    self.client
-                        .publish_diagnostics(uri, e.to_diag(&rope), None)
-                        .await
-                }
-                Ok(_) => (),
+            if let Err(e) = run_import(&import_file, &mut self.env.clone(), text, false) {
+                self.client
+                    .publish_diagnostics(uri, e.to_diag(&rope), None)
+                    .await
             }
         } else {
             self.client

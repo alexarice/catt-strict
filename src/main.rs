@@ -99,7 +99,7 @@ fn main() {
 
     for path in args.imports {
         let string = path.to_str().unwrap().to_owned();
-        match Command::Import(path, 0..string.len()).run(&mut env, None) {
+        match Command::Import(path, 0..string.len()).run(&mut env, None, true) {
             Ok(_) => {}
             Err(err) => err
                 .to_report(&Src::Import(string))
@@ -129,7 +129,7 @@ fn main() {
                             .then_ignore(end())
                             .parse(s.trim())
                             .map_err(CattError::ParseError)
-                            .and_then(|c| c.run(&mut env, None))
+                            .and_then(|c| c.run(&mut env, None, true))
                         {
                             Ok(_) => {}
                             Err(err) => {

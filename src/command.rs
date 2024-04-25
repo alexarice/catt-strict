@@ -181,16 +181,24 @@ pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
 }
 
 impl Command {
-    pub fn run(self, env: &mut Signature, file: Option<&PathBuf>) -> Result<(), CattError> {
-        eprintln!("----------------------------------------");
+    pub fn run(self, env: &mut Signature, file: Option<&PathBuf>, output: bool) -> Result<(), CattError> {
+	macro_rules! oprintln {
+	    ($($rest:tt)*) => {
+		if output {
+		    println!($($rest)*)
+		}
+	    }
+	}
+
+        oprintln!("----------------------------------------");
 
         macro_rules! printtmty {
             ($ctx: expr, $tm: expr, $ty: expr) => {
-                eprintln!(
+                oprintln!(
                     "{}",
                     $tm.to_raw(Some($ctx), env.implicits).to_doc().pretty(80)
                 );
-                eprintln!(
+                oprintln!(
                     "{} {}",
                     "has type".fg(Color::Blue),
                     $ty.to_raw(Some($ctx), env.implicits)
@@ -202,7 +210,7 @@ impl Command {
         }
         match self {
             Command::DefHead(nm, h) => {
-                eprintln!("{} {nm}", "Inferring".fg(Color::Green));
+                oprintln!("{} {nm}", "Inferring".fg(Color::Green));
                 let res = h.infer(env)?;
                 match &res {
                     Either::Left(r) => {
@@ -215,7 +223,7 @@ impl Command {
                 env.top_level.insert(nm, res);
             }
             Command::DefCtx(nm, ctx, tm) => {
-                eprintln!("{} {nm}", "Checking".fg(Color::Green));
+                oprintln!("{} {nm}", "Checking".fg(Color::Green));
                 let local = ctx.check(env)?;
                 match local {
                     Either::Left(local) => {
@@ -247,7 +255,7 @@ impl Command {
                 }
             }
             Command::DefWT(nm, ctx, ty, tm) => {
-                eprintln!(
+                oprintln!(
                     "{} {nm}\n{} {}",
                     "Checking".fg(Color::Green),
                     "has type".fg(Color::Blue),
@@ -258,7 +266,7 @@ impl Command {
                     ($l: expr, $p: ident) => {
                         let (tmt, tyt) = tm.check(env, &$l)?;
                         ty.check(env, &$l, &tyt.eval(&$l.ctx.id_env(), env))?;
-                        eprintln!(
+                        oprintln!(
                             "{} {}",
                             "Checked".fg(Color::Blue),
                             tmt.to_raw(Some(&$l.ctx), env.implicits)
@@ -285,7 +293,7 @@ impl Command {
                 }
             }
             Command::Normalise(ctx, tm) => {
-                eprintln!("{} {tm}", "Normalising".fg(Color::Green));
+                oprintln!("{} {tm}", "Normalising".fg(Color::Green));
                 let local = ctx.check(env)?;
                 macro_rules! normalise {
                     ($l:expr) => {
@@ -293,7 +301,7 @@ impl Command {
                         let sem_ctx = $l.ctx.id_env();
                         let tmn = tmt.eval(&sem_ctx, env);
                         let tyn = tyt.eval(&sem_ctx, env);
-                        eprintln!(
+                        oprintln!(
                             "{}",
                             RcDoc::group(
                                 RcDoc::text("Normal form:".fg(Color::Blue).to_string())
@@ -334,14 +342,14 @@ impl Command {
                 }
             }
             Command::Size(ctx, tm) => {
-                eprintln!("{} {tm}", "Calculating size of".fg(Color::Green));
+                oprintln!("{} {tm}", "Calculating size of".fg(Color::Green));
                 let local = ctx.check(env)?;
                 macro_rules! get_size {
                     ($l:expr) => {
                         let (tmt, _) = tm.check(env, &$l)?;
                         let sem_ctx = $l.ctx.id_env();
                         let tmn = tmt.eval(&sem_ctx, env);
-                        eprintln!(
+                        oprintln!(
                             "{}",
                             RcDoc::group(
                                 RcDoc::text("Term:".fg(Color::Blue).to_string())
@@ -367,7 +375,7 @@ impl Command {
                 }
             }
             Command::AssertEq(ctx, tm1, tm2) => {
-                eprintln!(
+                oprintln!(
                     "{} {tm1} {} {tm2}",
                     "Checking".fg(Color::Green),
                     "=".fg(Color::Blue)
@@ -396,7 +404,7 @@ impl Command {
                             let span = tm1.1.start..tm2.1.end();
                             return Err(CattError::Assertion(tm1, tm2, span));
                         }
-                        eprintln!(
+                        oprintln!(
                             "{}",
                             RcDoc::group(
                                 RcDoc::text("Terms:".fg(Color::Blue).to_string())
@@ -432,14 +440,14 @@ impl Command {
                 } else {
                     filename
                 };
-                eprintln!("{} {}", "Importing".fg(Color::Green), import_file.display());
+                oprintln!("{} {}", "Importing".fg(Color::Green), import_file.display());
                 let src = std::fs::read_to_string(&import_file)
                     .map_err(|_| CattError::FileError(import_file.clone(), sp.clone()))?;
 
-                run_import(&import_file, env, src)
+                run_import(&import_file, env, src, output)
                     .map_err(|e| CattError::InFile(Box::new(e), import_file.clone(), sp))?;
-                eprintln!("----------------------------------------");
-                eprintln!(
+                oprintln!("----------------------------------------");
+                oprintln!(
                     "{} {}",
                     "Finished importing".fg(Color::Green),
                     import_file.display()
@@ -454,15 +462,16 @@ pub fn run_import(
     import_file: &PathBuf,
     env: &mut Signature,
     src: String,
+    output: bool,
 ) -> Result<(), CattError> {
     let parsed = comment()
         .ignore_then(command().separated_by(comment()))
         .then_ignore(comment().ignore_then(end()))
         .parse(src.trim())
-        .map_err(|err| CattError::ParseError(err))?;
+        .map_err(CattError::ParseError)?;
 
     for cmd in parsed {
-        cmd.run(env, Some(&import_file))?
+        cmd.run(env, Some(import_file), output)?
     }
     Ok(())
 }
