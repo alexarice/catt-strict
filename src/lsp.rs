@@ -20,7 +20,6 @@ impl LanguageServer for Backend {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
-                // hover_provider: Some(HoverProviderCapability::Simple(true)),
                 ..Default::default()
             },
             ..Default::default()
@@ -58,13 +57,6 @@ impl LanguageServer for Backend {
         )
         .await
     }
-
-//     async fn hover(&self, _: HoverParams) -> Result<Option<Hover>> {
-//         Ok(Some(Hover {
-//             contents: HoverContents::Scalar(MarkedString::String("You're hovering!".to_string())),
-//             range: None,
-//         }))
-//     }
 }
 
 impl CattError {
@@ -93,12 +85,8 @@ impl Backend {
     async fn on_change(&self, uri: Url, text: String) {
         let rope = Rope::from_str(&text);
         if let Ok(import_file) = uri.to_file_path() {
-	    self.client.log_message(MessageType::INFO, "got here").await;
             match run_import(&import_file, &mut self.env.clone(), text) {
                 Err(e) => {
-                    self.client
-                        .log_message(MessageType::INFO, "Publishing")
-                        .await;
                     self.client
                         .publish_diagnostics(uri, e.to_diag(&rope), None)
                         .await
