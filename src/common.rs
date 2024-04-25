@@ -353,7 +353,7 @@ pub trait Ctx<P: Position> {
 
 pub trait Position: Clone + PartialEq + Eq {
     type Container<T: Clone>: Container<Self, T> + Clone;
-    type Ctx: Ctx<Self> + Clone;
+    type Ctx: Ctx<Self> + Clone + std::fmt::Debug;
 
     fn to_name(&self) -> Name;
 }
@@ -530,24 +530,26 @@ impl Path {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Insertion {
     Pruning,
     Full,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Reduction {
     pub disc_rem: bool,
     pub endo_coh: bool,
     pub insertion: Option<Insertion>,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum Support {
     FullInverse,
     NoInverse,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct InferRes<T: Position> {
     pub(crate) ctx: <T as Position>::Ctx,
     pub(crate) tm: TermC<T>,
@@ -566,6 +568,7 @@ impl<T: Position> InferRes<T> {
 
 pub type InferResEither = Either<InferRes<Path>, InferRes<Level>>;
 
+#[derive(Clone, Debug)]
 pub struct Signature {
     pub top_level: HashMap<Name, InferResEither>,
     pub reduction: Reduction,

@@ -4,16 +4,18 @@ use std::{
     path::PathBuf,
 };
 
-use ariadne::{Cache, Color, Fmt, Report, ReportKind, Source};
+use ariadne::{Cache, Color, Fmt, Source};
 use catt_strict::{
-    command::{command, Command, Src},
+    command::{command, CattError, Command, Src},
     common::{Insertion, Reduction, Signature, Support},
+    lsp::Backend,
 };
 use chumsky::prelude::*;
 use rustyline::{
     history::{History, MemHistory},
     Config,
 };
+use tower_lsp::{LspService, Server};
 
 #[derive(clap::Parser)]
 /// Interpreter for semistrict variations of Catt
@@ -37,6 +39,10 @@ struct Args {
     /// Start repl
     #[arg(short, long)]
     interactive: bool,
+
+    /// Start language server
+    #[arg(long)]
+    lsp: bool,
 
     /// Catt files to import
     #[arg(value_name = "FILE")]
@@ -119,37 +125,37 @@ fn main() {
                         continue;
                     } else {
                         rl.history_mut().add(&s).unwrap();
-                        match command().then_ignore(end()).parse(s.trim()) {
-                            Ok(command) => match command.run(&mut env, None) {
-                                Ok(_) => {}
-                                Err(err) => err
-                                    .to_report(&Src::Repl(s.clone()))
+                        match command()
+                            .then_ignore(end())
+                            .parse(s.trim())
+                            .map_err(CattError::ParseError)
+                            .and_then(|c| c.run(&mut env, None))
+                        {
+                            Ok(_) => {}
+                            Err(err) => {
+                                err.to_report(&Src::Repl(s.clone()))
                                     .into_iter()
                                     .for_each(|rep| {
                                         rep.eprint(&mut cache).unwrap();
-                                    }),
-                            },
-                            Err(err) => err.into_iter().for_each(|e| {
-                                Report::build(
-                                    ReportKind::Error,
-                                    Src::Repl(s.clone()),
-                                    e.span().start,
-                                )
-                                .with_message(e.to_string())
-                                .with_label(
-                                    ariadne::Label::new((Src::Repl(s.clone()), e.span()))
-                                        .with_message(format!("{:?}", e.reason()))
-                                        .with_color(Color::Red),
-                                )
-                                .finish()
-                                .eprint(&mut cache)
-                                .unwrap()
-                            }),
+                                    })
+                            }
                         }
                     }
                 }
                 Err(_) => break,
             }
         }
+    }
+
+    if args.lsp {
+        let stdin = tokio::io::stdin();
+        let stdout = tokio::io::stdout();
+
+        let (service, socket) = LspService::new(|client| Backend { client, env });
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to spawn tokio runtime");
+        rt.block_on(Server::new(stdin, stdout, socket).serve(service));
     }
 }

@@ -90,7 +90,7 @@ pub enum TypeCheckError<S> {
 }
 
 impl TypeCheckError<Range<usize>> {
-    fn span(&self) -> &Range<usize> {
+    pub fn span(&self) -> &Range<usize> {
         match self {
             TypeCheckError::UnknownTopLevel(_, s)
             | TypeCheckError::UnknownLocal(_, s)

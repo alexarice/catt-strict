@@ -14,5 +14,8 @@ either = "1.9.0"
 itertools = "0.11.0"
 pretty = "0.12.3"
 ref-cast = "1.0.20"
+ropey = "1.6.1"
 rustyline = "12.0.0"
 thiserror = "1.0.50"
+tokio = { version = "1.37.0", features = [ "io-std", "rt" ] }
+tower-lsp = "0.20.0"
