@@ -1,10 +1,12 @@
-# Catt-Strict
+# Catt_Strict
 
-This repository implements an experimental typechecker for the languages Catt, Cattsu, and Cattsua; type theories which model various semi-strictifications of higher categories (see [this thesis](https://arxiv.org/abs/2502.17068)). The typechecker here uses a bidirectional type checking algorithm to perform inference and utilises NbE to reduce terms to normal forms.
+This repository implements an experimental typechecker for the languages Catt, Catt_su, and Catt_sua; type theories which model various semi-strictifications of higher categories (see [this thesis](https://arxiv.org/abs/2502.17068)). The typechecker here uses a bidirectional type checking algorithm to perform inference and utilises NbE to reduce terms to normal forms.
 
 ## Installation
 
-The tool can be built with `cargo`, and should require no extra dependencies. A development environment is also provided through a nix flake with the correct versions of each tool, but it should not be necessary to use this. To install locally run:
+The tool can be built with `cargo`, and should require no extra dependencies. A development environment is also provided through a nix flake with the correct versions of each tool, but it should not be necessary to use this.
+
+To install locally run:
 
 ```bash
 cargo install
